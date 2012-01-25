@@ -16,7 +16,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:layout_marginBottom="90dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="80dp"
         android:gravity="center"
         android:onClick="myClickHandler"
         android:text="@string/update_button_text" >
@@ -25,12 +26,15 @@
     <TextView
         android:id="@+id/pagetext"
         android:layout_width="wrap_content"
-        android:layout_height="100dp"
+        android:layout_height="wrap_content"
+        android:minHeight="40dp"
         android:layout_gravity="center"
         android:gravity="center"
-        android:background="#CC000000"
+        android:background="#DD000000"
         android:textColor="#71DE12"
-        android:scrollbars="vertical" >
+        android:textStyle="bold"
+        android:scrollbars="vertical"
+        android:text="@string/msg_board_default_text" >
     </TextView>
 
 </LinearLayout>
