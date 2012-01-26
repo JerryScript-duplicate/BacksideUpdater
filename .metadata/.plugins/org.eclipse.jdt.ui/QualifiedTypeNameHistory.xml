@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<qualifiedTypeNameHistroy>
+<fullyQualifiedTypeName name="android.net.ConnectivityManager"/>
+<fullyQualifiedTypeName name="android.net.NetworkInfo"/>
+<fullyQualifiedTypeName name="android.content.Context"/>
+<fullyQualifiedTypeName name="java.net.URL"/>
+<fullyQualifiedTypeName name="android.widget.Button"/>
+<fullyQualifiedTypeName name="com.Backside.BacksideUpdater.R.id"/>
+<fullyQualifiedTypeName name="com.Backside.BacksideUpdater.RebootCmd"/>
+<fullyQualifiedTypeName name="com.Backside.BacksideUpdater.BacksideUpdaterActivity"/>
+<fullyQualifiedTypeName name="android.app.AlertDialog"/>
+</qualifiedTypeNameHistroy>

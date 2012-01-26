@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="hello">BACKside-IHO-VM670 Update Checker</string>
+    <string name="app_name">BacksideUpdater</string>
+    <string name="check4up_button_text">Check for Update</string>
+    <string name="updateNow_button_text">Download Update</string>
+    
+</resources>
