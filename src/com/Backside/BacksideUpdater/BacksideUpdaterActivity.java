@@ -85,7 +85,7 @@ public class BacksideUpdaterActivity extends Activity {
 					romName = separated[4];
 					localFileName = "/download/"+romName;
 					theFileSize = separated[5];
-					upToDate = (Integer.parseInt(theDate) <  BUILD_DATE);
+					upToDate = (BUILD_DATE >= Integer.parseInt(theDate));
 					String file = android.os.Environment.getExternalStorageDirectory().getPath() + localFileName;
 					File f = new File(file);
 					if (!upToDate) {
