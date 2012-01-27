@@ -20,6 +20,7 @@ import android.content.DialogInterface.OnDismissListener;
 import android.content.Intent;
 
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 
 import android.view.Gravity;
@@ -34,7 +35,7 @@ import android.widget.Toast;
 public class BacksideUpdaterActivity extends Activity {
 	private static TextView textView;
 	private TextView buttonTextView;
-	private static final String BUILD_VERSION = "eng.jerry.20120120.1234"; //Build.VERSION.INCREMENTAL;
+	private static final String BUILD_VERSION = Build.VERSION.INCREMENTAL;
 	private static final String[] SEPARATED_DATE = BUILD_VERSION.split("\\.");
 	private static final int BUILD_DATE = Integer.parseInt(SEPARATED_DATE[2]);
 	private int ALREADY_CHECKED = 0;
@@ -47,8 +48,8 @@ public class BacksideUpdaterActivity extends Activity {
 	private static String theFileSize;
 	private static Long fileSize;
 	private static String theMD5;
-	private static Boolean goodMD5;
 	private static String downloadMD5;
+	private static Boolean goodMD5;
 	private Boolean upToDate;
 
 	
