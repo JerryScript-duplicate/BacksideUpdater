@@ -3,7 +3,7 @@ BacksideUpdater/*
 bin/*
 gen/*
 proguard.cfg
-project.properties
+	project.properties
 .classpath
 .metadata
 .project
