@@ -1,3 +1,0 @@
-INDEX VERSION 1.126+/home/jerryscript/BacksideUpdater/.metadata/.plugins/org.eclipse.jdt.core
-3741477465.index
-1594895692.index
