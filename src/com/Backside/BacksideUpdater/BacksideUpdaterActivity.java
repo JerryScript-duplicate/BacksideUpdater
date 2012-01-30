@@ -15,9 +15,12 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnDismissListener;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 
 import android.net.Uri;
 import android.os.Build;
@@ -34,13 +37,14 @@ import android.widget.Toast;
 
 public class BacksideUpdaterActivity extends Activity {
 	private static TextView textView;
-	private TextView buttonTextView;
+	private static TextView buttonTextView;
+	private static final String manifestURL = "https://raw.github.com/JerryScript/BACKside-IHO/master/README";
 	private static final String BUILD_VERSION = Build.VERSION.INCREMENTAL;
 	private static final String[] SEPARATED_DATE = BUILD_VERSION.split("\\.");
 	private static final int BUILD_DATE = Integer.parseInt(SEPARATED_DATE[2]);
-	private int ALREADY_CHECKED = 0;
+	private static int ALREADY_CHECKED = 0;
 	private String theDate;
-	private String theUrl;
+	private static String theUrl;
 	private String theChangeLog;
 	private String romName;
 	private static String line;
@@ -51,6 +55,11 @@ public class BacksideUpdaterActivity extends Activity {
 	private static String downloadMD5;
 	private static Boolean goodMD5;
 	private Boolean upToDate;
+	
+    private static final int REQUEST_CODE_PICK_FILE = 999;
+    
+    private static Context theView;
+
 
 	
 /** Called when the activity is first created. */
@@ -59,10 +68,13 @@ public class BacksideUpdaterActivity extends Activity {
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+
+		setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 		setContentView(R.layout.main);
 
+		theView = this;
 		textView = (TextView) findViewById(R.id.pagetext);
-		textView.setText("Click to check for the lastest update\n\nBe patient after clicking!");
+		textView.setText("Click above to check for the lastest update\n\n\nClick below to check the md5sum of\nthe file you have already downloaded");
 		
 		buttonTextView = (TextView) findViewById(R.id.BacksideUpdaterButton);
 
@@ -71,10 +83,58 @@ public class BacksideUpdaterActivity extends Activity {
 
 	@Override
 	public void onBackPressed() {
-
 	    System.exit(0);
 	}
 	
+	@Override
+	public void onConfigurationChanged(Configuration newConfig) {
+	    super.onConfigurationChanged(newConfig);
+	    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+	}
+
+	public void alreadyDownloadedHandler(View view) {
+		switch (view.getId()) {
+		case R.id.alreadyDownloadedButton:
+			try {
+				textView.setText("Downloading manifest, standby...");
+				ALREADY_CHECKED = 2;
+				final ProgressDialog manualManifestDialog = ProgressDialog.show(
+						this, "", "Downloading manifest, standby...", true);
+				manualManifestDialog.setOnDismissListener(new OnDismissListener() {
+					public void onDismiss(DialogInterface dialog) {
+						checkDownloadedFile(); // manifest download complete, run checks
+					}
+				});
+				// create a separate thread to check the manifest
+				new Thread(new Runnable() {
+					public void run() {
+						try {
+							HttpClient client = new DefaultHttpClient();
+							HttpGet request = new HttpGet(manifestURL);
+							HttpResponse response = client.execute(request);
+							// Get the response
+							BufferedReader rd = new BufferedReader(new InputStreamReader(
+									response.getEntity().getContent()));
+							line = rd.readLine();
+						} catch (IOException e) {
+							// TODO possibly create error logging
+							textView.setText(e.getMessage());
+						}
+						manualManifestDialog.dismiss();
+						return;
+					}
+				}).start();
+			} 
+
+			catch (Exception e) {
+				// TODO possibly add error logging
+				textView.setText(e.getMessage());
+			}
+			break;
+		}
+		
+	}
+
 	public void myClickHandler(View view) {
 		switch (view.getId()) {
 		case R.id.BacksideUpdaterButton:
@@ -82,11 +142,12 @@ public class BacksideUpdaterActivity extends Activity {
 				if (ALREADY_CHECKED == 0) {
 					// first time user clicks main button
 					ALREADY_CHECKED = 1;
+					textView.setText("Downloading manifest, standby...");
 					// create a progress spinner to give the user
 					// something to look at while we grab the manifest
-					final ProgressDialog spinnerDialog = ProgressDialog.show(
-							this, "", "Checking for newest version...", true);
-					spinnerDialog.setOnDismissListener(new OnDismissListener() {
+					final ProgressDialog manifestDialog = ProgressDialog.show(
+							this, "", "Downloading manifest, standby...", true);
+					manifestDialog.setOnDismissListener(new OnDismissListener() {
 						public void onDismiss(DialogInterface dialog) {
 							checkStatus(); // manifest download complete, run checks
 						}
@@ -106,7 +167,7 @@ public class BacksideUpdaterActivity extends Activity {
 								// TODO possibly create error logging
 								textView.setText(e.getMessage());
 							}
-							spinnerDialog.dismiss();
+							manifestDialog.dismiss();
 							return;
 						}
 					}).start();
@@ -135,11 +196,12 @@ public class BacksideUpdaterActivity extends Activity {
 							// file download complete, check md5sum against manifest
 							// create a progress spinner to give the user
 							// something to look at while we grab the manifest
-							final ProgressDialog spinnerDialog = ProgressDialog.show(
+							textView.setText("Checking MD5");
+							final ProgressDialog md5Dialog = ProgressDialog.show(
 									this, "", "Checking the MD5 sum now...", true);
-							spinnerDialog.setOnDismissListener(new OnDismissListener() {
+							md5Dialog.setOnDismissListener(new OnDismissListener() {
 								public void onDismiss(DialogInterface dialog) {
-									md5dialog(); // show md5 dialogs
+									md5Dialog(localFileName, false); // show md5 dialogs
 								}
 							});
 							// create a separate thread to check the md5sum
@@ -149,7 +211,8 @@ public class BacksideUpdaterActivity extends Activity {
 										if (theMD5 == null || theMD5 == "" || localFileName == null) {
 											goodMD5 = false;
 										}
-										String calculatedDigest = calculateMD5("/sdcard"+localFileName);
+										String fileName = "/sdcard"+localFileName;
+										String calculatedDigest = calculateMD5(fileName);
 										if (calculatedDigest == null) {
 											goodMD5 = false;
 										} else {
@@ -159,7 +222,7 @@ public class BacksideUpdaterActivity extends Activity {
 										// TODO possibly add error logging
 										textView.setText(e.getMessage());
 									}
-									spinnerDialog.dismiss();
+									md5Dialog.dismiss();
 									return;
 								}
 							}).start();
@@ -194,9 +257,25 @@ public class BacksideUpdaterActivity extends Activity {
 			}
 		}
 
-	public void RebootCmd() {
+	public void checkDownloadedFile() {
+		String[] separated = line.split(",");
+		theDate = separated[0];
+		theUrl = separated[1];
+		theChangeLog = separated[2];
+		theMD5 = separated[3];
+		romName = separated[4];
+		theFileSize = separated[5];
+		// check the current build date against the manifest date
+		upToDate = (BUILD_DATE >= Integer.parseInt(theDate));
+        Intent intent = new Intent("org.openintents.action.PICK_FILE");
+        intent.setData(Uri.parse("file:///sdcard/"));
+        intent.putExtra("org.openintents.extra.TITLE", "Please select a file to check md5sum:");
+        startActivityForResult(intent, REQUEST_CODE_PICK_FILE);	
+	}
+	
+	public static void RebootCmd() {
 		// create a dialog choice to allow user to reboot directly into recovery
-		new AlertDialog.Builder(this)
+		new AlertDialog.Builder(theView)
 	    .setTitle("Reboot into Recovery")
 	    .setMessage("Are you sure you want to\nreboot into recovery now?")
 	    .setPositiveButton("Reboot Recovery", new DialogInterface.OnClickListener() {
@@ -276,12 +355,13 @@ public class BacksideUpdaterActivity extends Activity {
 
 	}
 	
-	private void md5dialog (){
+	private static void md5Dialog (String fileName, final Boolean downloaded){
+		final String md5FileName = fileName;
 		// create dialogs depending on the results of the md5sum
 		if(goodMD5){
 			// if md5sum is good, alert user
 			// and give option to reboot into recovery
-			new AlertDialog.Builder(this)
+			new AlertDialog.Builder(theView)
 			.setTitle("MD5 Verified!")
 			.setIcon(R.drawable.download_complete_icon)
 			.setMessage("Reboot into recovery,\nwipe cache & dalvik-cache,\nthen flash the zip file located\nin the download directory")
@@ -300,7 +380,7 @@ public class BacksideUpdaterActivity extends Activity {
 		} else {
 			// if md5sum is bad, alert user
 			// and give options to delete and re-download the file
-			new AlertDialog.Builder(this)
+			new AlertDialog.Builder(theView)
 			.setTitle("Download Error")
 			.setIcon(R.drawable.md5_error)
 			.setMessage("The downloaded file md5\n"+downloadMD5+"\ndoes not match the build\n"+theMD5+"\n\nDELETE CORRUPT FILE\n\nThen download again!")
@@ -309,12 +389,17 @@ public class BacksideUpdaterActivity extends Activity {
 					ALREADY_CHECKED = 2;
 					textView.setText("Wait for download to complete\n\nCheck the notification dropdown");
 					buttonTextView.setText("Check Again");
-					String file = android.os.Environment.getExternalStorageDirectory().getPath() + localFileName;
+					String file;
+					if (downloaded) {
+						file = md5FileName;						
+					} else {
+						file = android.os.Environment.getExternalStorageDirectory().getPath() + md5FileName;
+					}
 					File f = new File(file);
 					f.delete();
 					Intent downloadUpdate = new Intent(Intent.ACTION_VIEW);
 					downloadUpdate.setData(Uri.parse(theUrl));
-					startActivity(downloadUpdate);
+					downloadUpdate.getAction();
 					}
 			})
 			.setNegativeButton("Delete Manually", new DialogInterface.OnClickListener() {
@@ -340,20 +425,21 @@ public class BacksideUpdaterActivity extends Activity {
 		
 	}
 	
-	public static boolean checkMD5() throws IOException {
+	public static String checkMD5(String fileName) throws IOException {
 		textView.setText("Checking the md5sum...");
 
-		if (theMD5 == null || theMD5 == "" || localFileName == null) {
-			return false;
-			}
-		
-		String calculatedDigest = calculateMD5("/sdcard"+localFileName);
+		String calculatedDigest = calculateMD5(fileName);
 		
 		if (calculatedDigest == null) {
-			return false;
+			goodMD5 = false;
+			textView.setText("Error Checking MD5!\n\nPlease close the app\nand try again.");
 			}
 		
-		return calculatedDigest.equalsIgnoreCase(theMD5);
+		goodMD5 = calculatedDigest.equalsIgnoreCase(theMD5);
+		
+		md5Dialog(fileName, true);
+		
+		return calculatedDigest;
 		
 	}
 	
@@ -369,5 +455,34 @@ public class BacksideUpdaterActivity extends Activity {
 	
 	}
 	
+	
+	private static String badFilePath(){
+		textView.setText("Error selecting file!\n\nIf you have already downloaded\nthe file, select it in the \nfile manager by clicking the\nbutton below.");
+		return "bad";
+	}
+	  
+	@Override
+	  
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		super.onActivityResult(requestCode, resultCode, data);
+		if (resultCode == RESULT_OK && data != null) {
+			// obtain the filename
+			Uri fileUri = data.getData();
+			if (fileUri != null) {
+				String filePath = fileUri.getPath();
+				if (filePath != null) {
+					Intent checkDownloadedMD5 = new Intent();
+					try {
+						checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.checkMD5(filePath));
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.badFilePath());
+					}
+					sendBroadcast(checkDownloadedMD5);
+				}
+			}
+		}
+	}
+
 }
 
