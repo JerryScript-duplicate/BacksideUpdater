@@ -1,0 +1,10 @@
+assets/*
+BacksideUpdater/*
+bin/*
+gen/*
+proguard.cfg
+project.properties
+.classpath
+.metadata
+.project
+
