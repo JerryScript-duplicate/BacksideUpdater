@@ -55,6 +55,7 @@ public class BacksideUpdaterActivity extends Activity {
 	private static String downloadMD5;
 	private static Boolean goodMD5;
 	private Boolean upToDate;
+	private Boolean alreadyDownloaded;
 	
     private static final int REQUEST_CODE_PICK_FILE = 999;
     
@@ -75,10 +76,11 @@ public class BacksideUpdaterActivity extends Activity {
 		theView = this;
 		textView = (TextView) findViewById(R.id.pagetext);
 		textView.setText("Click above to check for the lastest update\n\n\nClick below to check the md5sum of\nthe file you have already downloaded");
-		
 		buttonTextView = (TextView) findViewById(R.id.BacksideUpdaterButton);
-
 		
+		alreadyDownloaded = false;
+
+		checkManifest();
 	}
 
 	@Override
@@ -96,34 +98,10 @@ public class BacksideUpdaterActivity extends Activity {
 		switch (view.getId()) {
 		case R.id.alreadyDownloadedButton:
 			try {
-				textView.setText("Downloading manifest, standby...");
+				alreadyDownloaded = true;
+				textView.setText("Checking the downloaded file against the manifest, standby...");
 				ALREADY_CHECKED = 2;
-				final ProgressDialog manualManifestDialog = ProgressDialog.show(
-						this, "", "Downloading manifest, standby...", true);
-				manualManifestDialog.setOnDismissListener(new OnDismissListener() {
-					public void onDismiss(DialogInterface dialog) {
-						checkDownloadedFile(); // manifest download complete, run checks
-					}
-				});
-				// create a separate thread to check the manifest
-				new Thread(new Runnable() {
-					public void run() {
-						try {
-							HttpClient client = new DefaultHttpClient();
-							HttpGet request = new HttpGet(manifestURL);
-							HttpResponse response = client.execute(request);
-							// Get the response
-							BufferedReader rd = new BufferedReader(new InputStreamReader(
-									response.getEntity().getContent()));
-							line = rd.readLine();
-						} catch (IOException e) {
-							// TODO possibly create error logging
-							textView.setText(e.getMessage());
-						}
-						manualManifestDialog.dismiss();
-						return;
-					}
-				}).start();
+				checkDownloadedFile();
 			} 
 
 			catch (Exception e) {
@@ -142,52 +120,22 @@ public class BacksideUpdaterActivity extends Activity {
 				if (ALREADY_CHECKED == 0) {
 					// first time user clicks main button
 					ALREADY_CHECKED = 1;
-					textView.setText("Downloading manifest, standby...");
-					// create a progress spinner to give the user
-					// something to look at while we grab the manifest
-					final ProgressDialog manifestDialog = ProgressDialog.show(
-							this, "", "Downloading manifest, standby...", true);
-					manifestDialog.setOnDismissListener(new OnDismissListener() {
-						public void onDismiss(DialogInterface dialog) {
-							checkStatus(); // manifest download complete, run checks
-						}
-					});
-					// create a separate thread to check the manifest
-					new Thread(new Runnable() {
-						public void run() {
-							try {
-								HttpClient client = new DefaultHttpClient();
-								HttpGet request = new HttpGet("https://raw.github.com/JerryScript/BACKside-IHO/master/README");
-								HttpResponse response = client.execute(request);
-								// Get the response
-								BufferedReader rd = new BufferedReader(new InputStreamReader(
-										response.getEntity().getContent()));
-								line = rd.readLine();
-							} catch (IOException e) {
-								// TODO possibly create error logging
-								textView.setText(e.getMessage());
-							}
-							manifestDialog.dismiss();
-							return;
-						}
-					}).start();
+					textView.setText("Checking packages against the manifest, standby...");
+					checkStatus();
 				} else {
 					if (ALREADY_CHECKED == 1){
 						// second time user clicks main button
 						// manifest has been checked
-						if(upToDate){
+						if(upToDate && !alreadyDownloaded){
 							// if up to date, nothing else to do, so exit
 							System.exit(0);
 						} else {
 							// if not up to date, open download URL, and set text views
 							ALREADY_CHECKED = 2;
-							Intent downloadUpdate = new Intent(Intent.ACTION_VIEW);
-							downloadUpdate.setData(Uri.parse(theUrl));
-							startActivity(downloadUpdate);
-							textView.setText("Wait for download to complete\n\nReboot into recovery\n\nWipe cache & dalvik cache\nThen flash the zip file");
-							buttonTextView.setText("Check Download Status");
+							downloadUpdateNow();
 						}
 					} else {
+						// ALREADY_CHECKED equals 2
 						// third time user clicks main button, three cases available
 						// --download is complete, ready to check md5sum
 						// --download is in progress (could be frozen, need to handle this)
@@ -198,7 +146,7 @@ public class BacksideUpdaterActivity extends Activity {
 							// something to look at while we grab the manifest
 							textView.setText("Checking MD5");
 							final ProgressDialog md5Dialog = ProgressDialog.show(
-									this, "", "Checking the MD5 sum now...", true);
+									this, "Checking the MD5 sum now", "Calculating md5 checksum...", true);
 							md5Dialog.setOnDismissListener(new OnDismissListener() {
 								public void onDismiss(DialogInterface dialog) {
 									md5Dialog(localFileName, false); // show md5 dialogs
@@ -240,7 +188,7 @@ public class BacksideUpdaterActivity extends Activity {
 								showCustomToast("Download not yet complete\n\nCheck the notification dropdown\nfor download status.\n\nOr press back to exit the Updater,\ndelete the partially downloaded file,\nand restart Updater to try again.");
 							} else {
 								ALREADY_CHECKED = 1;
-								showCustomToast("Download has not started\n\nClick the button to try again now.");
+								showCustomToast("Download has not started\n\nClick the button to try again now,\n\nOr click the button below to check in a different folder");
 								buttonTextView.setText("Download Now");
 							}
 						}
@@ -256,6 +204,40 @@ public class BacksideUpdaterActivity extends Activity {
 			break;
 			}
 		}
+	
+	public void checkManifest() {
+		// create a progress spinner to give the user
+		// something to look at while we grab the manifest
+		final ProgressDialog manifestDialog = ProgressDialog.show(
+				this, "Downloading the manifest", "Checking manifest...", true);
+		if (!alreadyDownloaded) {
+			manifestDialog.setOnDismissListener(new OnDismissListener() {
+				public void onDismiss(DialogInterface dialog) {
+					checkStatus(); // manifest download complete, run checks
+				}
+			});
+		}
+		// create a separate thread to check the manifest
+		new Thread(new Runnable() {
+			public void run() {
+				try {
+					HttpClient client = new DefaultHttpClient();
+					HttpGet request = new HttpGet(manifestURL);
+					HttpResponse response = client.execute(request);
+					// Get the response
+					BufferedReader rd = new BufferedReader(new InputStreamReader(
+							response.getEntity().getContent()));
+					line = rd.readLine();
+				} catch (IOException e) {
+					// TODO possibly create error logging
+					textView.setText(e.getMessage());
+				}
+				manifestDialog.dismiss();
+				return;
+			}
+		}).start();
+
+	}
 
 	public void checkDownloadedFile() {
 		String[] separated = line.split(",");
@@ -275,9 +257,12 @@ public class BacksideUpdaterActivity extends Activity {
 	
 	public static void RebootCmd() {
 		// create a dialog choice to allow user to reboot directly into recovery
+		TextView myMsg = new TextView(theView);
+		myMsg.setText("Are you sure you want to\nreboot into recovery now?");
+		myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
 		new AlertDialog.Builder(theView)
 	    .setTitle("Reboot into Recovery")
-	    .setMessage("Are you sure you want to\nreboot into recovery now?")
+	    .setView(myMsg)
 	    .setPositiveButton("Reboot Recovery", new DialogInterface.OnClickListener() {
 	        public void onClick(DialogInterface dialog, int whichButton) {
 				textView.setText("Rebooting into Recovery...");
@@ -297,6 +282,15 @@ public class BacksideUpdaterActivity extends Activity {
 	    }).show();
 	}
 	
+	public static void downloadUpdateNow(){
+		Intent downloadUpdate = new Intent(Intent.ACTION_VIEW);
+		downloadUpdate.setData(Uri.parse(theUrl));
+		theView.startActivity(downloadUpdate);
+		textView.setText("Wait for download to complete\n\nReboot into recovery\n\nWipe cache & dalvik cache\nThen flash the zip file");
+		buttonTextView.setText("Check Download Status");
+
+	}
+	
 	public void showCustomToast(String str) {
 		// a function to show a custom message to the user in a toast window
 		Toast toast = Toast.makeText(getApplicationContext(), str, Toast.LENGTH_LONG);
@@ -310,6 +304,7 @@ public class BacksideUpdaterActivity extends Activity {
 	}
 	
 	private void checkStatus(){
+		ALREADY_CHECKED = 1;
 		// split up the manifest into useable data
 		textView.setText("");
 		String[] separated = line.split(",");
@@ -361,10 +356,13 @@ public class BacksideUpdaterActivity extends Activity {
 		if(goodMD5){
 			// if md5sum is good, alert user
 			// and give option to reboot into recovery
+			TextView myMsg = new TextView(theView);
+			myMsg.setText("MD5 Verified!\nReboot into recovery,\nwipe cache & dalvik-cache,\nthen flash the zip file");
+			myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
 			new AlertDialog.Builder(theView)
-			.setTitle("MD5 Verified!")
+			.setTitle("MD5")
 			.setIcon(R.drawable.download_complete_icon)
-			.setMessage("Reboot into recovery,\nwipe cache & dalvik-cache,\nthen flash the zip file located\nin the download directory")
+			.setView(myMsg)
 			.setPositiveButton("Reboot Recovery", new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int whichButton) {
 					textView.setText("Rebooting into Recovery...");
@@ -380,10 +378,13 @@ public class BacksideUpdaterActivity extends Activity {
 		} else {
 			// if md5sum is bad, alert user
 			// and give options to delete and re-download the file
+			TextView myMsg = new TextView(theView);
+			myMsg.setText("The downloaded file md5\n"+downloadMD5+"\ndoes not match the build\n"+theMD5+"\n\nDELETE CORRUPT FILE\n\nThen download again!");
+			myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
 			new AlertDialog.Builder(theView)
 			.setTitle("Download Error")
 			.setIcon(R.drawable.md5_error)
-			.setMessage("The downloaded file md5\n"+downloadMD5+"\ndoes not match the build\n"+theMD5+"\n\nDELETE CORRUPT FILE\n\nThen download again!")
+			.setView(myMsg)
 			.setPositiveButton("Delete & Download Again", new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int whichButton) {
 					ALREADY_CHECKED = 2;
@@ -397,9 +398,7 @@ public class BacksideUpdaterActivity extends Activity {
 					}
 					File f = new File(file);
 					f.delete();
-					Intent downloadUpdate = new Intent(Intent.ACTION_VIEW);
-					downloadUpdate.setData(Uri.parse(theUrl));
-					downloadUpdate.getAction();
+					downloadUpdateNow();
 					}
 			})
 			.setNegativeButton("Delete Manually", new DialogInterface.OnClickListener() {

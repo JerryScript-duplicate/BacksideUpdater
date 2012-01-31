@@ -3,7 +3,7 @@
 
     <string name="hello">BACKside-IHO-VM670 Update Checker</string>
     <string name="app_name">BacksideUpdater</string>
-    <string name="update_button_text">Check Now</string>
+    <string name="update_button_text">Checking Now</string>
     <string name="msg_board_default_text">Backside Updater</string>
     <string name="already_downloaded_default_text">I\'ve Already Downloaded!</string>
     
