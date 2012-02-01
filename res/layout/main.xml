@@ -20,25 +20,15 @@
         android:id="@+id/pagetext"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="160dp"
+        android:layout_marginTop="140dp"
         android:minHeight="40dp"
         android:layout_centerHorizontal="true"
         android:gravity="center"
-        android:background="#DD000000"
+        android:background="#000000"
         android:textColor="#71DE12"
         android:textStyle="bold"
         android:scrollbars="vertical"
         android:text="@string/msg_board_default_text" >
     </TextView>
-
-    <Button
-        android:id="@+id/alreadyDownloadedButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_centerHorizontal="true"
-        android:gravity="center"
-        android:onClick="alreadyDownloadedHandler"
-        android:text="@string/already_downloaded_default_text" />
 
 </RelativeLayout>
