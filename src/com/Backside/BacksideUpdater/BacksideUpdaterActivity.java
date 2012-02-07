@@ -22,10 +22,14 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 
+import android.text.method.LinkMovementMethod;
 import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -70,6 +74,7 @@ public class BacksideUpdaterActivity extends Activity {
 		setContentView(R.layout.main);
 		theView = this;
 		textView = (TextView) findViewById(R.id.pagetext);
+		textView.setMovementMethod(LinkMovementMethod.getInstance());
 		textView.setText("Click above to check for the lastest update\n\n\nPress your menu key to check\nthe md5sum of a file you have\nalready downloaded");
 		buttonTextView = (TextView) findViewById(R.id.BacksideUpdaterButton);
 		buttonTextView.setVisibility(4);
@@ -104,7 +109,7 @@ public class BacksideUpdaterActivity extends Activity {
 			return true;
 		case 2:
 			textView.setGravity(3);
-			textView.setText("Changelog "+BUILD_DATE+":\n\n"+theChangeLog);
+			textView.setText("Changelog "+romName+":\n\n"+theChangeLog);
 			return true;
 		case 3:
 			System.exit(0);
@@ -191,38 +196,66 @@ public class BacksideUpdaterActivity extends Activity {
 		}
 	}
 	
+	private boolean isNetworkAvailable() {
+		ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+		NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+		return activeNetworkInfo != null;
+	}
+
 	public void checkManifest() {
-		// create a progress spinner to give the user
-		// something to look at while we grab the manifest
-		buttonTextView.setText("Checking...");
-		final ProgressDialog manifestDialog = ProgressDialog.show(
-				this, "BacksideUpdater\nChecking For Updates", "Downloading manifest now...", true);
-		if (!alreadyDownloaded) {
-			manifestDialog.setOnDismissListener(new OnDismissListener() {
-				public void onDismiss(DialogInterface dialog) {
-					checkStatus(); // manifest download complete, run checks
-				}
-			});
-		}
-		// create a separate thread to check the manifest
-		new Thread(new Runnable() {
-			public void run() {
-				try {
-					HttpClient client = new DefaultHttpClient();
-					HttpGet request = new HttpGet(manifestURL);
-					HttpResponse response = client.execute(request);
-					// Get the response
-					BufferedReader rd = new BufferedReader(new InputStreamReader(
-							response.getEntity().getContent()));
-					line = rd.readLine();
-				} catch (IOException e) {
-					// TODO possibly create error logging
-					textView.setText(e.getMessage());
-				}
-				manifestDialog.dismiss();
-				return;
+		// check for network connection
+		if (isNetworkAvailable()){
+			// create a progress spinner to give the user
+			// something to look at while we grab the manifest
+			final ProgressDialog manifestDialog = ProgressDialog.show(
+					this, "BacksideUpdater\nChecking For Updates", "Downloading manifest now...", true);
+			if (!alreadyDownloaded) {
+				manifestDialog.setOnDismissListener(new OnDismissListener() {
+					public void onDismiss(DialogInterface dialog) {
+						checkStatus(); // manifest download complete, run checks
+					}
+				});
 			}
-		}).start();
+			// create a separate thread to check the manifest
+			new Thread(new Runnable() {
+				public void run() {
+					try {
+						HttpClient client = new DefaultHttpClient();
+						HttpGet request = new HttpGet(manifestURL);
+						HttpResponse response = client.execute(request);
+						// Get the response
+						BufferedReader rd = new BufferedReader(new InputStreamReader(
+								response.getEntity().getContent()));
+						line = rd.readLine();
+					} catch (IOException e) {
+						// TODO possibly create error logging
+						textView.setText(e.getMessage());
+					}
+					manifestDialog.dismiss();
+					return;
+				}
+			}).start();
+			buttonTextView.setText("Checking...");
+		} else {
+			TextView myMsg = new TextView(theView);
+			myMsg.setText("No network connection available.\n\nEnable either WiFi or 3g under\n\nSettings -- Wireless & Networks");
+			myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
+			new AlertDialog.Builder(theView)
+			.setTitle("Network Error!")
+			.setIcon(R.drawable.md5_error)
+			.setView(myMsg)
+			.setPositiveButton("Open Wireless Settings", new DialogInterface.OnClickListener() {
+				public void onClick(DialogInterface dialog, int whichButton) {
+					theView.startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));
+					System.exit(0);
+					}
+			})
+			.setNegativeButton("Try Later", new DialogInterface.OnClickListener() {
+				public void onClick(DialogInterface dialog, int whichButton) {
+					System.exit(0);
+				}
+			}).show();
+		}
 	}
 
 	private void checkStatus(){
@@ -262,7 +295,7 @@ public class BacksideUpdaterActivity extends Activity {
 			} else {
 				// if we haven't downloaded yet, prompt the user to download the new version
 				textView.setGravity(3);
-				textView.setText("Changelog "+theDate+":\n\n"+theChangeLog);
+				textView.setText("Changelog "+romName+":\n\n"+theChangeLog);
 				showCustomToast("A new build is available:\n\nBACKside-IHO-VM670-"+theDate);
 				buttonTextView.setText("Download Now");
 			}
@@ -285,7 +318,7 @@ public class BacksideUpdaterActivity extends Activity {
 		// check the current build date against the manifest date
 		upToDate = (BUILD_DATE >= Integer.parseInt(theDate));
         Intent intent = new Intent("org.openintents.action.PICK_FILE");
-        intent.setData(Uri.parse("file:///sdcard/"));
+        intent.setData(Uri.parse("file:///sdcard/download/"));
         intent.putExtra("org.openintents.extra.TITLE", "Please select a file to check md5sum:");
         startActivityForResult(intent, REQUEST_CODE_PICK_FILE);	
 	}
@@ -298,12 +331,12 @@ public class BacksideUpdaterActivity extends Activity {
 		buttonTextView.setText("Check Download Status");
 	}
 	
-	public void showCustomToast(String str) {
+	public static void showCustomToast(String str) {
 		// a function to show a custom message to the user in a toast window
-		Toast toast = Toast.makeText(getApplicationContext(), str, Toast.LENGTH_LONG);
+		Toast toast = Toast.makeText(theView, str, Toast.LENGTH_LONG);
 		toast.setGravity(Gravity.CENTER, 0, 0);
 		LinearLayout toastView = (LinearLayout) toast.getView();
-		ImageView customIcon = new ImageView(getApplicationContext());
+		ImageView customIcon = new ImageView(theView);
 		customIcon.setImageResource(R.drawable.custom_update_dialog_icon);
 		toastView.addView(customIcon, 0);
 		toast.show();
@@ -452,29 +485,36 @@ public class BacksideUpdaterActivity extends Activity {
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 		super.onActivityResult(requestCode, resultCode, data);
-		if (resultCode == RESULT_OK && data != null) {
-			// obtain the filename
-			try {
-			Uri fileUri = data.getData();
-			if (fileUri != null && !fileUri.toString().equals("")) {
-				String filePath = fileUri.getPath();
-				if (filePath != null) {
-					Intent checkDownloadedMD5 = new Intent();
+		if (resultCode == RESULT_OK) {
+			if(requestCode == 999) {
+				if(data != null) {
+					// obtain the filename
 					try {
-						checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.checkMD5(filePath, true));
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.badFilePath());
+					Uri fileUri = data.getData();
+					if (fileUri != null && !fileUri.toString().equals("")) {
+						String filePath = fileUri.getPath();
+						if (filePath != null) {
+							Intent checkDownloadedMD5 = new Intent();
+							try {
+								checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.checkMD5(filePath, true));
+							} catch (IOException e) {
+								// TODO Auto-generated catch block
+								checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.badFilePath());
+							}
+							sendBroadcast(checkDownloadedMD5);
+						}
 					}
-					sendBroadcast(checkDownloadedMD5);
+					} catch (Exception e) {
+						textView.setText("Error:\n\n"+e.getMessage());
+					}
+				} else {
+					badFilePath();
 				}
+			} else {
+				
 			}
-			} catch (Exception e) {
-				textView.setText("Error:\n\n"+e.getMessage());
-			}
-		} else {
-			badFilePath();
 		}
+		
 	}
 	
 }
