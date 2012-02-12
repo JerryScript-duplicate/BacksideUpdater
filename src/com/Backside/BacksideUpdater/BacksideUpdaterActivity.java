@@ -246,18 +246,18 @@ public class BacksideUpdaterActivity extends Activity {
 			.setView(myMsg)
 			.setPositiveButton("Open Wireless Settings", new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int whichButton) {
-					theView.startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));
-					System.exit(0);
+			        startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));
+			        System.exit(0);
 					}
 			})
-			.setNegativeButton("Try Later", new DialogInterface.OnClickListener() {
+			.setNegativeButton("Try Again Later", new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int whichButton) {
 					System.exit(0);
 				}
 			}).show();
 		}
 	}
-
+	
 	private void checkStatus(){
 		ALREADY_CHECKED = 1;
 		// split up the manifest into useable data
@@ -486,8 +486,8 @@ public class BacksideUpdaterActivity extends Activity {
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 		super.onActivityResult(requestCode, resultCode, data);
 		if (resultCode == RESULT_OK) {
-			if(requestCode == 999) {
-				if(data != null) {
+			if (requestCode == 999) {
+				if (data != null) {
 					// obtain the filename
 					try {
 					Uri fileUri = data.getData();
@@ -510,8 +510,6 @@ public class BacksideUpdaterActivity extends Activity {
 				} else {
 					badFilePath();
 				}
-			} else {
-				
 			}
 		}
 		
