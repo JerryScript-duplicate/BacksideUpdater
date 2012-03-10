@@ -30,9 +30,11 @@ import android.os.Bundle;
 import android.provider.Settings;
 
 import android.text.method.LinkMovementMethod;
+import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 
 import android.widget.ImageView;
@@ -44,12 +46,13 @@ import android.widget.Toast;
 public class BacksideUpdaterActivity extends Activity {
 	private static TextView textView;
 	private static TextView buttonTextView;
-	private static final String manifestURL = "https://raw.github.com/JerryScript/BACKside-IHO/master/README";
+	private static final String manifestURL = "https://raw.github.com/JerryScript/BACKside-IHO/master/legacy";
 	private static final String BUILD_VERSION = Build.VERSION.INCREMENTAL;
 	private static final String[] SEPARATED_DATE = BUILD_VERSION.split("\\.");
 	private static final int BUILD_DATE = Integer.parseInt(SEPARATED_DATE[2]);
 	private static int ALREADY_CHECKED = 0;
 	private String theDate;
+	private int choosenDate = 0;
 	private static String theUrl;
 	private String theChangeLog = "";
 	private String romName;
@@ -64,7 +67,7 @@ public class BacksideUpdaterActivity extends Activity {
 	private Boolean alreadyDownloaded;
     private static final int REQUEST_CODE_PICK_FILE = 999;
     private static Context theView;
-
+    GestureDetector gd;
 	
 /** Called when the activity is first created. */
 	@Override
@@ -80,28 +83,48 @@ public class BacksideUpdaterActivity extends Activity {
 		buttonTextView.setVisibility(4);
 		alreadyDownloaded = false;
 		checkManifest();
+		gd = new GestureDetector(getBaseContext(), sogl);
 	}
 
+	// Completely exit app when back button is pressed
 	@Override
 	public void onBackPressed() {
 	    System.exit(0);
 	}
 	
+	// Keep portrait orientation only, I'm lazy
 	@Override
 	public void onConfigurationChanged(Configuration newConfig) {
 	    super.onConfigurationChanged(newConfig);
 	    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 	}
 
+	// Handle longpress to launch easter egg
+	@Override
+    public boolean onTouchEvent(MotionEvent event) {
+        return gd.onTouchEvent(event);
+    }
+
+    GestureDetector.SimpleOnGestureListener sogl = new GestureDetector.SimpleOnGestureListener() {
+        public boolean onDown(MotionEvent event) {
+            return true;
+        }
+        public void onLongPress(MotionEvent event) {
+            downloadUpdateNow();
+        }   
+    };
+
+	// Create menu_key menus
 	@Override
     public boolean onCreateOptionsMenu(Menu menu) {
-		menu.add(1, 1, 1, "Already Downloaded - Select File Manually");
+		menu.add(1, 1, 1, "Select File Manually");
 		menu.add(1, 2, 2, "Show Changelog");
-		menu.add(1, 3, 3, "Exit Now");
+		menu.add(1, 3, 3, "Show All Versions");
+		menu.add(1, 4, 4, "Exit Now");
 		return true;
 	}
 
-	@Override
+        @Override
 	public boolean onOptionsItemSelected(MenuItem item) {
 		switch(item.getItemId()) {
 		case 1:
@@ -112,26 +135,16 @@ public class BacksideUpdaterActivity extends Activity {
 			textView.setText("Changelog "+romName+":\n\n"+theChangeLog);
 			return true;
 		case 3:
+			showExtendedManifest();
+			return true;
+		case 4:
 			System.exit(0);
 			return true;
 		}
 		return super.onOptionsItemSelected(item);
 	}
 	
-	public void alreadyDownloadedHandler() {
-		textView.setGravity(17);
-		try {
-			alreadyDownloaded = true;
-			textView.setText("Checking the downloaded file against the manifest, standby...");
-			ALREADY_CHECKED = 2;
-			checkDownloadedFile();
-			
-		} catch (Exception e) {
-			// TODO possibly add error logging
-			textView.setText(e.getMessage());
-		}
-	}
-
+	// This is the main function, most events are funneled through here
 	public void myClickHandler(View view) {
 		textView.setGravity(17);
 		switch (view.getId()) {
@@ -177,9 +190,11 @@ public class BacksideUpdaterActivity extends Activity {
 							String file = android.os.Environment.getExternalStorageDirectory().getPath() + localFileName;
 							File f = new File(file);
 							if (f.exists()) {
+								// Download is still in progress
 								showCustomToast("Download not yet complete\n\nCheck the notification dropdown\nfor download status.\n\nOr press back to exit the Updater,\ndelete the partially downloaded file,\nand restart Updater to try again.");
 								textView.setText("Download not yet complete\n\nCheck the notification dropdown\nfor download status.\n\nOr press back to exit the Updater,\ndelete the partially downloaded file,\nand restart Updater to try again.");
 							} else {
+								// Download has not begun
 								ALREADY_CHECKED = 1;
 								showCustomToast("Download has not started\n\nClick the button to try again now,\n\nOr press the menu key to\ncheck in a different folder");
 								textView.setText("Download has not started\n\nClick the button to try again now,\n\nOr press the menu key to\ncheck in a different folder");
@@ -189,19 +204,20 @@ public class BacksideUpdaterActivity extends Activity {
 					}
 				}
 			} catch (Exception e) {
-				// TODO possibly add error logging
 				textView.setText(e.getMessage());
 			}
 			break;
 		}
 	}
-	
+
+	// Check for network connectivity, still could crash during network changes
 	private boolean isNetworkAvailable() {
 		ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
 		NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
 		return activeNetworkInfo != null;
 	}
 
+	// Download the update manifest
 	public void checkManifest() {
 		// check for network connection
 		if (isNetworkAvailable()){
@@ -228,7 +244,6 @@ public class BacksideUpdaterActivity extends Activity {
 								response.getEntity().getContent()));
 						line = rd.readLine();
 					} catch (IOException e) {
-						// TODO possibly create error logging
 						textView.setText(e.getMessage());
 					}
 					manifestDialog.dismiss();
@@ -237,6 +252,8 @@ public class BacksideUpdaterActivity extends Activity {
 			}).start();
 			buttonTextView.setText("Checking...");
 		} else {
+			// No network connection is available let the user know,
+			// and give option to open wireless settings
 			TextView myMsg = new TextView(theView);
 			myMsg.setText("No network connection available.\n\nEnable either WiFi or 3g under\n\nSettings -- Wireless & Networks");
 			myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -258,20 +275,49 @@ public class BacksideUpdaterActivity extends Activity {
 		}
 	}
 	
+	// show a list of older builds
+	private void showExtendedManifest(){
+		final String[] oldManifest = line.split("~");
+		final String[] oldVersion = new String[oldManifest.length];
+		int cntr = 0;
+		for (String i : oldManifest) {
+			String[] nextVersion = i.split(",");
+			String[] stuff = nextVersion[4].split("\\.");
+			String[] romStuff = stuff[0].split("-");
+			if (cntr == 0) {
+				oldVersion[cntr] = romStuff[3] + "  (newest)";
+			} else {
+				oldVersion[cntr] = romStuff[3];
+			}
+			cntr ++;
+		}
+		new AlertDialog.Builder(theView)
+		.setTitle("BACKside-IHO Builds - 2012")
+		.setItems(oldVersion, new DialogInterface.OnClickListener() {
+		    public void onClick(DialogInterface dialog, int item) {
+		    	choosenDate = item;
+		    	checkStatus();
+		    }
+		}).show();
+	}
+
+	// Parse the manifest and check current status
 	private void checkStatus(){
 		ALREADY_CHECKED = 1;
 		// split up the manifest into useable data
 		textView.setText("");
-		String[] separated = line.split(",");
+		String[] romVersions = line.split("~");
+		String[] separated = romVersions[choosenDate].split(",");
 		theDate = separated[0];
 		theUrl = separated[1];
+		// format the changelog
 		theChangeLog = separated[2].replace("--", "\n\n--");
 		theMD5 = separated[3];
 		romName = separated[4];
 		localFileName = "/download/"+romName;
 		theFileSize = separated[5];
 		// check the current build date against the manifest date
-		upToDate = (BUILD_DATE >= Integer.parseInt(theDate));
+		upToDate = (BUILD_DATE >= Integer.parseInt(theDate) && choosenDate == 0);
 		if (upToDate) { buttonTextView.setVisibility(4); } else { buttonTextView.setVisibility(0); }
 		// check for the latest version in the downloaded directory
 		String file = android.os.Environment.getExternalStorageDirectory().getPath() + localFileName;
@@ -296,7 +342,11 @@ public class BacksideUpdaterActivity extends Activity {
 				// if we haven't downloaded yet, prompt the user to download the new version
 				textView.setGravity(3);
 				textView.setText("Changelog "+romName+":\n\n"+theChangeLog);
-				showCustomToast("A new build is available:\n\nBACKside-IHO-VM670-"+theDate);
+				if (choosenDate == 0){
+					showCustomToast("A new build is available:\n\nBACKside-IHO-VM670-"+theDate);
+				} else {
+					showCustomToast("Click the button to download\n\nBACKside-IHO-VM670-"+theDate);
+				}
 				buttonTextView.setText("Download Now");
 			}
 		} else {
@@ -307,22 +357,34 @@ public class BacksideUpdaterActivity extends Activity {
 
 	}
 	
-	public void checkDownloadedFile() {
-		String[] separated = line.split(",");
-		theDate = separated[0];
-		theUrl = separated[1];
-		theChangeLog = separated[2];
-		theMD5 = separated[3];
-		romName = separated[4];
-		theFileSize = separated[5];
-		// check the current build date against the manifest date
-		upToDate = (BUILD_DATE >= Integer.parseInt(theDate));
-        Intent intent = new Intent("org.openintents.action.PICK_FILE");
-        intent.setData(Uri.parse("file:///sdcard/download/"));
-        intent.putExtra("org.openintents.extra.TITLE", "Please select a file to check md5sum:");
-        startActivityForResult(intent, REQUEST_CODE_PICK_FILE);	
+	// Let user check any already downloaded file against the manifest md5sum
+	public void alreadyDownloadedHandler() {
+		textView.setGravity(17);
+		try {
+			alreadyDownloaded = true;
+			textView.setText("Checking the downloaded file against the manifest, standby...");
+			ALREADY_CHECKED = 2;
+			String[] romVersions = line.split("~");
+			String[] separated = romVersions[choosenDate].split(",");
+			theDate = separated[0];
+			theUrl = separated[1];
+			theChangeLog = separated[2];
+			theMD5 = separated[3];
+			romName = separated[4];
+			theFileSize = separated[5];
+			// check the current build date against the manifest date
+			upToDate = (BUILD_DATE >= Integer.parseInt(theDate));
+	        Intent intent = new Intent("org.openintents.action.PICK_FILE");
+	        intent.setData(Uri.parse("file:///sdcard/download/"));
+	        intent.putExtra("org.openintents.extra.TITLE", "Please select a file to check md5sum:");
+	        startActivityForResult(intent, REQUEST_CODE_PICK_FILE);	
+			
+		} catch (Exception e) {
+			textView.setText(e.getMessage());
+		}
 	}
 	
+	// Open browser to download url from the manifest
 	public static void downloadUpdateNow(){
 		Intent downloadUpdate = new Intent(Intent.ACTION_VIEW);
 		downloadUpdate.setData(Uri.parse(theUrl));
@@ -331,19 +393,8 @@ public class BacksideUpdaterActivity extends Activity {
 		buttonTextView.setText("Check Download Status");
 	}
 	
-	public static void showCustomToast(String str) {
-		// a function to show a custom message to the user in a toast window
-		Toast toast = Toast.makeText(theView, str, Toast.LENGTH_LONG);
-		toast.setGravity(Gravity.CENTER, 0, 0);
-		LinearLayout toastView = (LinearLayout) toast.getView();
-		ImageView customIcon = new ImageView(theView);
-		customIcon.setImageResource(R.drawable.custom_update_dialog_icon);
-		toastView.addView(customIcon, 0);
-		toast.show();
-	}
-	
+	// create dialogs depending on the results of the md5sum
 	private static void md5Dialog (final String fileName, final Boolean downloaded){
-		// create dialogs depending on the results of the md5sum
 		if(goodMD5){
 			// if md5sum is good, alert user
 			// and give option to reboot into recovery
@@ -396,16 +447,7 @@ public class BacksideUpdaterActivity extends Activity {
 		}
 	}
 	
-	public static boolean checkFileSize(String fileName) {
-		try {
-			File file = new File("/sdcard"+localFileName);
-			fileSize = file.length() / 1024 / 1024;
-			return (fileSize < Long.valueOf(theFileSize));
-		} catch (Exception e) {
-			return true;
-		}
-	}
-	
+	// Check the md5sum in a separate thread to avoid hanging the main thread
 	public static String checkMD5(final String fileName, Boolean downloaded) throws IOException {
 		final String md5FileName = (!downloaded) ? android.os.Environment.getExternalStorageDirectory().getPath() + fileName : fileName;
 		buttonTextView.setVisibility(4);
@@ -428,7 +470,6 @@ public class BacksideUpdaterActivity extends Activity {
 						}
 					goodMD5 = calculatedDigest.equalsIgnoreCase(theMD5);
 				} catch (IOException e) {
-					// TODO possibly add error logging
 					textView.setText(e.getMessage());
 				}
 				md5Dialog.dismiss();
@@ -438,6 +479,7 @@ public class BacksideUpdaterActivity extends Activity {
 		return "done";
 	}
 	
+	// Use exec to calculate the downloaded file's md5sum
 	public static String calculateMD5(String fileName) throws IOException {
 		downloadMD5 = "";
 		if (fileName != null && !fileName.toString().equals("")) {
@@ -449,14 +491,8 @@ public class BacksideUpdaterActivity extends Activity {
 		return downloadMD5;
 	}
 	
-	
-	private static String badFilePath(){
-		textView.setText("Error selecting file!\n\nIf you have already downloaded,\npress your menu key to select\nit in file the manager.");
-		return "bad";
-	}
-	
+	// create a dialog choice to allow user to reboot directly into recovery
 	public static void RebootCmd() {
-		// create a dialog choice to allow user to reboot directly into recovery
 		TextView myMsg = new TextView(theView);
 		myMsg.setText("Are you sure you want to\nreboot into recovery now?");
 		myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -481,7 +517,36 @@ public class BacksideUpdaterActivity extends Activity {
 	        }
 	    }).show();
 	}
+
+	// Used to determine if download is complete
+	public static boolean checkFileSize(String fileName) {
+		try {
+			File file = new File("/sdcard"+localFileName);
+			fileSize = file.length() / 1024 / 1024;
+			return (fileSize < Long.valueOf(theFileSize));
+		} catch (Exception e) {
+			return true;
+		}
+	}
 	
+	// bad file handler
+	private static String badFilePath(){
+		textView.setText("Error selecting file!\n\nIf you have already downloaded,\npress your menu key to select\nit in file the manager.");
+		return "bad";
+	}
+	
+	// a function to show a custom message to the user in a toast window
+	public static void showCustomToast(String str) {
+		Toast toast = Toast.makeText(theView, str, Toast.LENGTH_LONG);
+		toast.setGravity(Gravity.CENTER, 0, 0);
+		LinearLayout toastView = (LinearLayout) toast.getView();
+		ImageView customIcon = new ImageView(theView);
+		customIcon.setImageResource(R.drawable.custom_update_dialog_icon);
+		toastView.addView(customIcon, 0);
+		toast.show();
+	}
+	
+	// Handle file picker's results
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 		super.onActivityResult(requestCode, resultCode, data);
@@ -498,7 +563,6 @@ public class BacksideUpdaterActivity extends Activity {
 							try {
 								checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.checkMD5(filePath, true));
 							} catch (IOException e) {
-								// TODO Auto-generated catch block
 								checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.badFilePath());
 							}
 							sendBroadcast(checkDownloadedMD5);
