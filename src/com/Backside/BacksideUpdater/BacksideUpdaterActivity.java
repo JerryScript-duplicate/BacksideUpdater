@@ -2,8 +2,8 @@ package com.Backside.BacksideUpdater;
 
 
 import java.io.BufferedReader;
-import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 
@@ -49,7 +49,7 @@ import android.widget.Toast;
 public class BacksideUpdaterActivity extends Activity {
 	private static TextView textView;
 	private static TextView buttonTextView;
-	private static final String manifestURL = "https://raw.github.com/JerryScript/BACKside-IHO/master/legacy";
+	private static final String manifestURL = "https://raw.github.com/JerryScript/BACKside-IHO/master/legacy"; //"http://192.168.1.148/legacy"; 
 	private static final String BUILD_VERSION = Build.VERSION.INCREMENTAL;
 	private static final String[] SEPARATED_DATE = BUILD_VERSION.split("\\.");
 	private static final int BUILD_DATE = Integer.parseInt(SEPARATED_DATE[2]);
@@ -119,7 +119,23 @@ public class BacksideUpdaterActivity extends Activity {
 			return true;
         }
         public void onLongPress(MotionEvent event) {
-        	// add easter egg
+        	String bband = null;
+        	BufferedReader reader = null;
+        	try {
+        		reader = new BufferedReader(new InputStreamReader(new FileInputStream("/sys/devices/system/soc/soc0/build_id")));
+        		bband = reader.readLine();
+        	}
+        	catch(IOException io) {
+        		io.printStackTrace();
+        		bband = "error";
+        	}
+        	finally {
+        		try { reader.close(); }
+        		catch(Exception e) {}
+        		reader = null;
+        	}
+        	String basebandMessage = "Current Radio: " + bband;
+        	showCustomToast(basebandMessage);
         }   
     };
 
@@ -256,11 +272,15 @@ public class BacksideUpdaterActivity extends Activity {
 			// create a progress spinner to give the user
 			// something to look at while we grab the manifest
 			final ProgressDialog manifestDialog = ProgressDialog.show(
-					this, "BacksideUpdater\nChecking For Updates", "Downloading manifest now...", true);
+					this, "Checking For Updates", "Downloading manifest now...", true);
 			if (!alreadyDownloaded) {
 				manifestDialog.setOnDismissListener(new OnDismissListener() {
 					public void onDismiss(DialogInterface dialog) {
+						if (line != null) {
 						checkStatus(); // manifest download complete, run checks
+						} else {
+							checkManifest();
+						}
 					}
 				});
 			}
@@ -324,7 +344,7 @@ public class BacksideUpdaterActivity extends Activity {
 			cntr ++;
 		}
 		new AlertDialog.Builder(theView)
-		.setTitle("BACKside-IHO Builds - 2012")
+		.setTitle("Available For Download")
 		.setItems(oldVersion, new DialogInterface.OnClickListener() {
 		    public void onClick(DialogInterface dialog, int item) {
 		    	choosenDate = item;
@@ -343,7 +363,7 @@ public class BacksideUpdaterActivity extends Activity {
 		theDate = separated[0];
 		theUrl = separated[1];
 		// format the changelog
-		theChangeLog = separated[2].replace("--", "\n\n--");
+		theChangeLog = separated[2].replace("--", "\n\n");
 		theMD5 = separated[3];
 		romName = separated[4];
 		localFileName = "/download/"+romName;
@@ -399,7 +419,7 @@ public class BacksideUpdaterActivity extends Activity {
 			String[] separated = romVersions[choosenDate].split(",");
 			theDate = separated[0];
 			theUrl = separated[1];
-			theChangeLog = separated[2];
+			theChangeLog = separated[2].replace("--", "\n\n");
 			theMD5 = separated[3];
 			romName = separated[4];
 			theFileSize = separated[5];
@@ -469,7 +489,7 @@ public class BacksideUpdaterActivity extends Activity {
 			})
 			.setNegativeButton("Delete Manually", new DialogInterface.OnClickListener() {
 					public void onClick(DialogInterface dialog, int whichButton) {
-					textView.setText("Yummy Gingerbread!");
+					textView.setText("Press Menu Key For Options");
 					System.exit(0);
 					}
 			}).show();
