@@ -30,6 +30,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.os.RecoverySystem;
 import android.provider.Settings;
 
 import android.text.method.LinkMovementMethod;
@@ -90,6 +91,11 @@ public class BacksideUpdaterActivity extends Activity {
 		buttonTextView = (TextView) findViewById(R.id.BacksideUpdaterButton);
 		buttonTextView.setVisibility(4);
 		
+		try {
+			Runtime.getRuntime().exec("su");
+			} catch (Exception e) {
+				showCustomToast(e.toString());
+				}
 		alreadyDownloaded = false;
 		checkManifest();
 		gd = new GestureDetector(getBaseContext(), sogl);
@@ -458,7 +464,7 @@ public class BacksideUpdaterActivity extends Activity {
 			.setPositiveButton("Reboot Recovery", new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int whichButton) {
 					textView.setText("Rebooting into Recovery...");
-					RebootCmd();
+					RebootCmd(fileName);
 				}
 			})
 			.setNegativeButton("Install Later", new DialogInterface.OnClickListener() {
@@ -498,7 +504,7 @@ public class BacksideUpdaterActivity extends Activity {
 	
 	// Check the md5sum in a separate thread to avoid hanging the main thread
 	public static String checkMD5(final String fileName, Boolean downloaded) throws IOException {
-		String thisFileName = fileName;
+		final String thisFileName = fileName;
 		if (thisFileName.substring(thisFileName.length() - 3).equalsIgnoreCase("zip")) {
 			final String md5FileName = (!downloaded) ? android.os.Environment.getExternalStorageDirectory().getPath() + fileName : fileName;
 			buttonTextView.setVisibility(4);
@@ -546,7 +552,7 @@ public class BacksideUpdaterActivity extends Activity {
 	}
 	
 	// create a dialog choice to allow user to reboot directly into recovery
-	public static void RebootCmd() {
+	public static void RebootRecovery() {
 		TextView myMsg = new TextView(theView);
 		myMsg.setText("Are you sure you want to\nreboot into recovery now?");
 		myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -571,10 +577,107 @@ public class BacksideUpdaterActivity extends Activity {
 	    }).show();
 	}
 
+	// create a dialog choice to allow user to reboot directly into recovery and install ROM automatically
+	public static void RebootCmd(String theFileName) {
+		String updateFileName = "";
+		if (theFileName.indexOf("sdcard") < 0) {
+			updateFileName = "/sdcard" + theFileName;
+		} else {
+			updateFileName = theFileName;
+		}
+		final String updateFileCmd = "cp " + updateFileName + " /cache/update.zip";
+		showCustomToast("Copying "+ updateFileName);
+		TextView myMsg = new TextView(theView);
+		myMsg.setText("Are you sure you want to\nreboot into recovery now?\n\nClick Install ROM Now\nto automatically flash\nthe new update!");
+		myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
+		new AlertDialog.Builder(theView)
+	    .setTitle("Reboot into Recovery")
+	    .setView(myMsg)
+	    .setPositiveButton("Reboot Recovery Install Manually", new DialogInterface.OnClickListener() {
+	        public void onClick(DialogInterface dialog, int whichButton) {
+				textView.setText("Rebooting into Recovery...");
+		    	try {
+		    		String[] str ={"su","-c","reboot recovery"};
+		    		Runtime.getRuntime().exec(str);
+		    		} catch (Exception e){
+		    			System.out.println("failed to exec reboot recovery");
+		    			}
+	        }
+	    })
+	    .setNeutralButton("Install ROM Now!", new DialogInterface.OnClickListener() {
+	        public void onClick(DialogInterface dialog, int whichButton) {
+				textView.setText("Rebooting into Recovery\n\nAutomatically Installing ROM...");
+				final ProgressDialog rebootCmdDialog = ProgressDialog.show(
+						theView, "Preparing files", "Copying install files to /cache...", true);
+				rebootCmdDialog.setOnDismissListener(new OnDismissListener() {
+					public void onDismiss(DialogInterface dialog) {
+						installROM();
+					}
+				});
+				// create a separate thread to prepare files for automatic installation
+				new Thread(new Runnable() {
+					@SuppressWarnings("finally")
+					public void run() {
+						try {
+							String[] str1 ={"su", "-c", "chown system cache /cache && chmod 0777 /cache /cache  && chmod 0777 /cache/recovery && chmod 0777 /cache/recovery/command"};
+							Runtime.getRuntime().exec(str1);
+							String[] str2 ={"su", "-c", "echo '--update_package=/cache/update.zip' > /cache/recovery/command"};
+							Runtime.getRuntime().exec(str2);
+							String[] str ={"su", "-c", updateFileCmd};
+							Runtime.getRuntime().exec(str);
+						} catch (Exception e1) {
+							showCustomToast(e1.toString());
+						} finally {
+							try {
+								Thread.sleep(20000);
+							} catch (InterruptedException e) {
+								showCustomToast(e.toString());
+							}
+							rebootCmdDialog.dismiss();
+							return;
+						}
+					}
+				}).start();
+	        }
+	    })
+	    .setNegativeButton("Later", new DialogInterface.OnClickListener() {
+	        public void onClick(DialogInterface dialog, int whichButton) {
+				textView.setText("Press Menu Key For Options");
+	        }
+	    }).show();
+	}
+
+	// Automatic ROM installation
+	public static void installROM() {
+		if (checkFileSize("/cache/update.zip")) {
+			try {
+				String[] str1 ={"su", "-c", "chown system cache /cache && chmod 0777 /cache /cache  && chmod 0777 /cache/recovery && chmod 0777 /cache/recovery/command"};
+				Runtime.getRuntime().exec(str1);
+				String[] str2 ={"su", "-c", "echo '--update_package=/cache/update.zip' > /cache/recovery/command"};
+				Runtime.getRuntime().exec(str2);
+			} catch (Exception e) {
+				showCustomToast(e.toString());
+			    }
+			final File RECOVERY_DIR = new File("/cache/recovery");
+			final File COMMAND_FILE = new File(RECOVERY_DIR, "command");
+			try {
+				RecoverySystem.installPackage(theView, COMMAND_FILE);
+			} catch (Exception e) {
+				showCustomToast(e.toString());
+			}
+		} else {
+			showCustomToast("Update zip copy incomplete!");
+		}
+
+	}
 	// Used to determine if download is complete
 	public static boolean checkFileSize(String fileName) {
+		String testFileName = fileName;
+		if (fileName != "/cache/update.zip") {
+			testFileName = "/sdcard" + localFileName;
+		}
 		try {
-			File file = new File("/sdcard"+localFileName);
+			File file = new File(testFileName);
 			fileSize = file.length() / 1024 / 1024;
 			return (fileSize < Long.valueOf(theFileSize));
 		} catch (Exception e) {
@@ -616,7 +719,7 @@ public class BacksideUpdaterActivity extends Activity {
 			.setPositiveButton("Reboot Recovery", new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int whichButton) {
 					textView.setText("Rebooting into Recovery...");
-					RebootCmd();
+					RebootRecovery();
 				}
 			})
 			.setNegativeButton("Reboot Later", new DialogInterface.OnClickListener() {
