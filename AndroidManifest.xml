@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.Backside.BacksideUpdater"
-    android:versionCode="1"
-    android:versionName="1.1" >
+    android:versionCode="3"
+    android:versionName="3.1" >
 
     <uses-sdk android:minSdkVersion="10" />
     
@@ -13,7 +13,8 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE"></uses-permission>
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"></uses-permission>
     <uses-permission android:name="android.permission.REBOOT" />
-    
+    <uses-permission android:name="android.permission.ACCESS_CACHE_FILESYSTEM" />
+    <uses-permission android:name="android.permission.COPY_PROTECTED_DATA" />
 
     <application
         android:icon="@drawable/ic_launcher"

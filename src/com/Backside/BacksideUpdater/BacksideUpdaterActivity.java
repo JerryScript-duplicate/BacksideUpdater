@@ -30,7 +30,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.os.RecoverySystem;
+import android.os.PowerManager;
 import android.provider.Settings;
 
 import android.text.method.LinkMovementMethod;
@@ -48,9 +48,10 @@ import android.widget.Toast;
 
 
 public class BacksideUpdaterActivity extends Activity {
+    private static Context theView;
 	private static TextView textView;
 	private static TextView buttonTextView;
-	private static final String manifestURL = "https://raw.github.com/JerryScript/BACKside-IHO/master/legacy"; //"http://192.168.1.148/legacy"; 
+	private static String manifestURL = ""; // "http://192.168.1.148/legacy"; // for local testing
 	private static final String BUILD_VERSION = Build.VERSION.INCREMENTAL;
 	private static final String[] SEPARATED_DATE = BUILD_VERSION.split("\\.");
 	private static final int BUILD_DATE = Integer.parseInt(SEPARATED_DATE[2]);
@@ -75,7 +76,6 @@ public class BacksideUpdaterActivity extends Activity {
 	private static int recoveryStepCount = 0;
     private static final int REQUEST_CODE_PICK_FILE = 999;
     private static final int REQUEST_CODE_PICK_RECOVERY = 1000;
-    private static Context theView;
     GestureDetector gd;
 	
 /** Called when the activity is first created. */
@@ -85,6 +85,7 @@ public class BacksideUpdaterActivity extends Activity {
 		setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 		setContentView(R.layout.main);
 		theView = this;
+		manifestURL = theView.getString(R.string.manifest_url);
 		textView = (TextView) findViewById(R.id.pagetext);
 		textView.setMovementMethod(LinkMovementMethod.getInstance());
 		textView.setText("Click above to check for the lastest update\n\n\nPress your menu key to check\nthe md5sum of a file you have\nalready downloaded");
@@ -241,11 +242,60 @@ public class BacksideUpdaterActivity extends Activity {
 							// Nothing we can do till we pull downloads into the app
 							ALREADY_CHECKED = 2;
 							// check if download has started
-							String file = android.os.Environment.getExternalStorageDirectory().getPath() + localFileName;
-							File f = new File(file);
+							final String file = android.os.Environment.getExternalStorageDirectory().getPath() + localFileName;
+							final File f = new File(file);
 							if (f.exists()) {
-								// Download is still in progress
-								showCustomToast("Download not yet complete\n\nCheck the notification dropdown\nfor download status.\n\nOr press back to exit the Updater,\ndelete the partially downloaded file,\nand restart Updater to try again.");
+								// Download is still in progress, so show it
+								final ProgressDialog downloadDialog = new ProgressDialog(theView);
+								downloadDialog.setCancelable(true);
+								downloadDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+								downloadDialog.setProgress(0);
+								downloadDialog.setMax(100);
+								downloadDialog.setMessage("Downloading\n" + romName + "\n\nNote- It is safe to continue downloading in the background");
+								downloadDialog.setOnDismissListener(new OnDismissListener() {
+									public void onDismiss(DialogInterface dialog) {
+										final File fProgress = new File(file);
+										final int progressFileSize = (int) (fProgress.length()) / 1024 / 1024;
+										int percentageDownloaded = (progressFileSize * 100 / Integer.parseInt(theFileSize));
+										if(percentageDownloaded >= 100) {
+											try {
+												textView.setText("Checking MD5");
+												checkMD5(localFileName, false);
+												} catch (IOException e) {
+													e.printStackTrace();
+													}
+										}
+									}
+								});
+						        // handler for the background updating
+						        final Handler downloadProgressHandler = new Handler() {
+						            public void handleMessage(Message msg) {
+										final File fProgress = new File(file);
+										final int progressFileSize = (int) (fProgress.length()) / 1024 / 1024;
+										int percentageDownloaded = (progressFileSize * 100 / Integer.parseInt(theFileSize));
+										downloadDialog.setProgress(percentageDownloaded);
+						            }
+						        };
+						        downloadDialog.show();
+						        // create a thread for updating the progress bar
+						        Thread downloadProgress = new Thread (new Runnable() {
+						           public void run() {
+						               try {
+						                   while (downloadDialog.getProgress() < downloadDialog.getMax()) {
+						                       // wait 500ms between each update
+						                       Thread.sleep(500);
+						                       // active the update handler
+						                       downloadProgressHandler.sendMessage(downloadProgressHandler.obtainMessage());
+						                   }
+						                   Thread.sleep(500);
+						               } catch (java.lang.InterruptedException e) {
+						            	   showCustomToast(e.toString());
+						            	   }
+						               downloadDialog.dismiss();
+						           }
+						        });
+						        // start the background thread
+						        downloadProgress.start();
 								textView.setText("Download not yet complete\n\nCheck the notification dropdown\nfor download status.\n\nOr press back to exit the Updater,\ndelete the partially downloaded file,\nand restart Updater to try again.");
 							} else {
 								// Download has not begun
@@ -336,16 +386,18 @@ public class BacksideUpdaterActivity extends Activity {
 	// show a list of older builds
 	private void showExtendedManifest(){
 		final String[] oldManifest = line.split("~");
-		final String[] oldVersion = new String[oldManifest.length];
+		final int versionLength = oldManifest.length;
+		final String[] oldVersion = new String[versionLength];
 		int cntr = 0;
 		for (String i : oldManifest) {
 			String[] nextVersion = i.split(",");
-			String[] stuff = nextVersion[4].split("\\.");
-			String[] romStuff = stuff[0].split("-");
+			String thisRomDate = nextVersion[0].substring(4,8) + nextVersion[0].substring(0,4);
 			if (cntr == 0) {
-				oldVersion[cntr] = romStuff[3] + "  (newest)";
+				oldVersion[cntr] = thisRomDate + "  (newest)";
+			} else if ((cntr == versionLength - 1) && (nextVersion[4].indexOf("CWM") >= 0)) {
+				oldVersion[cntr] = thisRomDate + " CWM-Green-Recovery";
 			} else {
-				oldVersion[cntr] = romStuff[3];
+				oldVersion[cntr] = thisRomDate;
 			}
 			cntr ++;
 		}
@@ -401,9 +453,11 @@ public class BacksideUpdaterActivity extends Activity {
 				textView.setGravity(3);
 				textView.setText("Changelog "+romName+":\n\n"+theChangeLog);
 				if (choosenDate == 0){
-					showCustomToast("A new build is available:\n\nBACKside-IHO-VM670-"+theDate);
+					showCustomToast("A new build is available:\n\n" + romName);
+				} else if ((choosenDate == (romVersions.length -1)) && (romName.indexOf("CWM") >= 0)) {
+					showCustomToast("Click the button to download\n\nCWM-Green-Recovery-"+theDate);
 				} else {
-					showCustomToast("Click the button to download\n\nBACKside-IHO-VM670-"+theDate);
+					showCustomToast("Click the button to download\n\n" + romName);
 				}
 				buttonTextView.setText("Download Now");
 			}
@@ -505,7 +559,7 @@ public class BacksideUpdaterActivity extends Activity {
 	// Check the md5sum in a separate thread to avoid hanging the main thread
 	public static String checkMD5(final String fileName, Boolean downloaded) throws IOException {
 		final String thisFileName = fileName;
-		if (thisFileName.substring(thisFileName.length() - 3).equalsIgnoreCase("zip")) {
+		if (thisFileName.substring(thisFileName.length() - 3).equalsIgnoreCase("zip") || thisFileName.substring(thisFileName.length() - 3).equalsIgnoreCase("img")) {
 			final String md5FileName = (!downloaded) ? android.os.Environment.getExternalStorageDirectory().getPath() + fileName : fileName;
 			buttonTextView.setVisibility(4);
 			textView.setText("Checking MD5");
@@ -513,7 +567,11 @@ public class BacksideUpdaterActivity extends Activity {
 					theView, "Checking The MD5", "Calculating md5 checksum...", true);
 			md5Dialog.setOnDismissListener(new OnDismissListener() {
 				public void onDismiss(DialogInterface dialog) {
-					md5Dialog(fileName, true); // show md5 dialogs
+					if (thisFileName.substring(thisFileName.length() - 3).equalsIgnoreCase("zip")) {
+						md5Dialog(fileName, true); // show md5 dialogs
+					} else if (thisFileName.substring(thisFileName.length() - 3).equalsIgnoreCase("img")) {
+						installRecovery(thisFileName);
+					}
 				}
 			});
 			// create a separate thread to check the md5sum
@@ -527,6 +585,7 @@ public class BacksideUpdaterActivity extends Activity {
 							}
 						goodMD5 = calculatedDigest.equalsIgnoreCase(theMD5);
 					} catch (IOException e) {
+						showCustomToast(e.getMessage());
 						textView.setText(e.getMessage());
 					}
 					md5Dialog.dismiss();
@@ -562,12 +621,8 @@ public class BacksideUpdaterActivity extends Activity {
 	    .setPositiveButton("Reboot Recovery", new DialogInterface.OnClickListener() {
 	        public void onClick(DialogInterface dialog, int whichButton) {
 				textView.setText("Rebooting into Recovery...");
-		    	try {
-		    		String[] str ={"su","-c","reboot recovery"};
-		    		Runtime.getRuntime().exec(str);
-		    		} catch (Exception e){
-		    			System.out.println("failed to exec reboot recovery");
-		    			}
+				PowerManager pm = (PowerManager) theView.getSystemService(Context.POWER_SERVICE);
+		        pm.reboot("recovery");
 	        }
 	    })
 	    .setNegativeButton("Later", new DialogInterface.OnClickListener() {
@@ -576,8 +631,8 @@ public class BacksideUpdaterActivity extends Activity {
 	        }
 	    }).show();
 	}
-
-	// create a dialog choice to allow user to reboot directly into recovery and install ROM automatically
+	
+	// create a dialog choice to allow user to reboot directly into recovery and/or install ROM automatically
 	public static void RebootCmd(String theFileName) {
 		String updateFileName = "";
 		if (theFileName.indexOf("sdcard") < 0) {
@@ -585,95 +640,51 @@ public class BacksideUpdaterActivity extends Activity {
 		} else {
 			updateFileName = theFileName;
 		}
-		final String updateFileCmd = "cp " + updateFileName + " /cache/update.zip";
-		showCustomToast("Copying "+ updateFileName);
+		final String theUpdateFileName = updateFileName;
+		final String recoveryUpdateString ="chmod 0777 /cache && chmod 0777 /cache/recovery && touch /cache/recovery/command && echo '--wipe_cache\n--update_package=" + theUpdateFileName + "' > /cache/recovery/command";
 		TextView myMsg = new TextView(theView);
-		myMsg.setText("Are you sure you want to\nreboot into recovery now?\n\nClick Install ROM Now\nto automatically flash\nthe new update!");
+		myMsg.setText("Are you sure you want to\nreboot into recovery now?\n\nClick Reboot Recovery\nto install the ROM manually\n\nClick Install ROM Now!\nto automatically wipe cache/dalvik-cache\nand install the update package!\n\nNote- Auto-Install tested on:\nCWM-Green, BobZhome, IHO,\nand DrewWalton-Touch recoveries\n\n*Auto wipe_dalvik-cache only works with\nCWM-Green recovery*");
 		myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
 		new AlertDialog.Builder(theView)
-	    .setTitle("Reboot into Recovery")
+	    .setTitle("Reboot Recovery - Install ROM")
 	    .setView(myMsg)
-	    .setPositiveButton("Reboot Recovery Install Manually", new DialogInterface.OnClickListener() {
+	    .setPositiveButton("Reboot Recovery", new DialogInterface.OnClickListener() {
 	        public void onClick(DialogInterface dialog, int whichButton) {
 				textView.setText("Rebooting into Recovery...");
-		    	try {
-		    		String[] str ={"su","-c","reboot recovery"};
-		    		Runtime.getRuntime().exec(str);
-		    		} catch (Exception e){
-		    			System.out.println("failed to exec reboot recovery");
-		    			}
+				PowerManager pm = (PowerManager) theView.getSystemService(Context.POWER_SERVICE);
+		        pm.reboot("recovery");
 	        }
 	    })
 	    .setNeutralButton("Install ROM Now!", new DialogInterface.OnClickListener() {
 	        public void onClick(DialogInterface dialog, int whichButton) {
-				textView.setText("Rebooting into Recovery\n\nAutomatically Installing ROM...");
-				final ProgressDialog rebootCmdDialog = ProgressDialog.show(
-						theView, "Preparing files", "Copying install files to /cache...", true);
-				rebootCmdDialog.setOnDismissListener(new OnDismissListener() {
-					public void onDismiss(DialogInterface dialog) {
-						installROM();
-					}
-				});
-				// create a separate thread to prepare files for automatic installation
-				new Thread(new Runnable() {
-					@SuppressWarnings("finally")
-					public void run() {
-						try {
-							String[] str1 ={"su", "-c", "chown system cache /cache && chmod 0777 /cache /cache  && chmod 0777 /cache/recovery && chmod 0777 /cache/recovery/command"};
-							Runtime.getRuntime().exec(str1);
-							String[] str2 ={"su", "-c", "echo '--update_package=/cache/update.zip' > /cache/recovery/command"};
-							Runtime.getRuntime().exec(str2);
-							String[] str ={"su", "-c", updateFileCmd};
-							Runtime.getRuntime().exec(str);
-						} catch (Exception e1) {
-							showCustomToast(e1.toString());
+				textView.setText("Preparing System To Reboot into Recovery\n\nAutomatically Installing ROM...");
+				try {
+					String[] str1 ={"su", "-c", recoveryUpdateString};
+					Runtime.getRuntime().exec(str1);
+					} catch (Exception e) {
+						showCustomToast(e.toString());
 						} finally {
-							try {
-								Thread.sleep(20000);
-							} catch (InterruptedException e) {
-								showCustomToast(e.toString());
-							}
-							rebootCmdDialog.dismiss();
-							return;
+							Handler handler = new Handler();
+							handler.postDelayed(new Runnable() {
+								public void run() {
+									PowerManager pm = (PowerManager) theView.getSystemService(Context.POWER_SERVICE);
+									pm.reboot("recovery");
+								}
+							}, 1000);
 						}
-					}
-				}).start();
 	        }
 	    })
-	    .setNegativeButton("Later", new DialogInterface.OnClickListener() {
+	    .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
 	        public void onClick(DialogInterface dialog, int whichButton) {
 				textView.setText("Press Menu Key For Options");
 	        }
 	    }).show();
 	}
-
-	// Automatic ROM installation
-	public static void installROM() {
-		if (checkFileSize("/cache/update.zip")) {
-			try {
-				String[] str1 ={"su", "-c", "chown system cache /cache && chmod 0777 /cache /cache  && chmod 0777 /cache/recovery && chmod 0777 /cache/recovery/command"};
-				Runtime.getRuntime().exec(str1);
-				String[] str2 ={"su", "-c", "echo '--update_package=/cache/update.zip' > /cache/recovery/command"};
-				Runtime.getRuntime().exec(str2);
-			} catch (Exception e) {
-				showCustomToast(e.toString());
-			    }
-			final File RECOVERY_DIR = new File("/cache/recovery");
-			final File COMMAND_FILE = new File(RECOVERY_DIR, "command");
-			try {
-				RecoverySystem.installPackage(theView, COMMAND_FILE);
-			} catch (Exception e) {
-				showCustomToast(e.toString());
-			}
-		} else {
-			showCustomToast("Update zip copy incomplete!");
-		}
-
-	}
+	
 	// Used to determine if download is complete
 	public static boolean checkFileSize(String fileName) {
 		String testFileName = fileName;
-		if (fileName != "/cache/update.zip") {
+		if (fileName.indexOf("sdcard") == -1) {
 			testFileName = "/sdcard" + localFileName;
 		}
 		try {
@@ -681,7 +692,8 @@ public class BacksideUpdaterActivity extends Activity {
 			fileSize = file.length() / 1024 / 1024;
 			return (fileSize < Long.valueOf(theFileSize));
 		} catch (Exception e) {
-			return true;
+			showCustomToast(e.toString());
+			return false;
 		}
 	}
 	
@@ -690,7 +702,7 @@ public class BacksideUpdaterActivity extends Activity {
 		if (whichFileType == 0){
 			textView.setText("Error selecting file!\n\nIf you have already downloaded,\npress your menu key to select\nit in file the manager.");
 		} else {
-			textView.setText("Error selecting file!\n\nRecovery file extension should be img\n\nIf you have already downloaded,\npress your menu key to select\nit in file the manager.");
+			textView.setText("Error selecting file!\n\nRecovery file extension should be img\n\nIf you have already downloaded,\npress your menu key to select\nit in file the manager\nand if it ends with .txt\nrename it from .txt to .img");
 		}
 		return "bad";
 	}
@@ -706,8 +718,12 @@ public class BacksideUpdaterActivity extends Activity {
 		toast.show();
 	}
 	
+	// create a dialog choice to allow user to reboot directly into recovery
+	// if it appears recovery was flashed successfully
 	public static void recoveryFinishedDialog() {
 		String[] rmsg = lastRecoveryMessage.split(" ");
+		// if it appears that the recovery has been flashed
+		// give user option to reboot into recovery
 		if (rmsg[0].equals("flashing") && recoveryStepCount > 20) {
 			TextView myMsg = new TextView(theView);
 			myMsg.setText("Finished installing\n\n" + recoveryName + "\n\nReboot into recovery now?");
@@ -728,6 +744,8 @@ public class BacksideUpdaterActivity extends Activity {
 					}
 			}).show();
 		} else {
+			// it appears as if there was an error flashing the recovery image
+			// notify user and give option to try again or exit
 			TextView myMsg = new TextView(theView);
 			myMsg.setText("Error installing " + recoveryName + "\n\nCheck the file before trying again.");
 			myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -748,18 +766,25 @@ public class BacksideUpdaterActivity extends Activity {
 		}
 	}
 	
+	// create a dialog choice to allow user to install a recovery img file
 	public static String installRecovery(final String recoveryFile) {
-		String thisFileName = recoveryFile;
+		String theFileName = "";
+		if (recoveryFile.indexOf("/sdcard") < 0) {
+			theFileName = "/sdcard" + recoveryFile;
+		} else {
+			theFileName = recoveryFile;
+		}
+		final String thisFileName = theFileName;
 		if (thisFileName.substring(thisFileName.length() - 3).equalsIgnoreCase("img")) {
 			TextView myMsg = new TextView(theView);
-			myMsg.setText("Are you sure you want to install\n\n" + recoveryFile);
+			myMsg.setText("Are you sure you want to install\n\n" + recoveryFile + "\n");
 			myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
 			new AlertDialog.Builder(theView)
 			.setTitle("Install Recovery Now")
 			.setView(myMsg)
 			.setPositiveButton("Install Now", new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int whichButton) {
-					doInstallRecovery(recoveryFile);
+					doInstallRecovery(thisFileName);
 				}
 			})
 			.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
@@ -773,13 +798,15 @@ public class BacksideUpdaterActivity extends Activity {
 		return "done";
 	}
 
+	// install the selected recovery image
+	// create a progress dialog during the installation process
 	public static String doInstallRecovery(final String recoveryFile) {
 		recoveryName = recoveryFile;
 		final ProgressDialog recoveryDialog = ProgressDialog.show(
 				theView, "Installing Recovery", "Installing " + recoveryName + "...", true);
 		recoveryDialog.setOnDismissListener(new OnDismissListener() {
 			public void onDismiss(DialogInterface dialog) {
-				recoveryFinishedDialog(); // Show final reboot dialog
+				recoveryFinishedDialog(); // Show reboot dialog
 			}
 		});
 		final Handler progressHandler = new Handler() {
@@ -787,7 +814,7 @@ public class BacksideUpdaterActivity extends Activity {
 	        	textView.setGravity(80);
 	            textView.setText(recoveryMessage);
 	        }
-	    };		// create a separate thread to check the md5sum
+	    };		// create a separate thread to install the recovery and grab system output
 		new Thread(new Runnable() {
 			public void run() {
 	            String[] str ={"su","-c","flash_image recovery " + recoveryName};

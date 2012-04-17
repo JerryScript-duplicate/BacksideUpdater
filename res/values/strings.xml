@@ -2,8 +2,14 @@
 <resources>
 
     <string name="hello">BACKside-IHO-VM670 Update Checker</string>
+
     <string name="app_name">BacksideUpdater</string>
-    <string name="update_button_text">Checking Now</string>
+
     <string name="msg_board_default_text">Backside Updater</string>
+
+    <string name="update_button_default_text">Checking Now</string>
     
+    <string name="manifest_url">https://raw.github.com/JerryScript/BACKside-IHO/master/legacy</string>
+
+
 </resources>
