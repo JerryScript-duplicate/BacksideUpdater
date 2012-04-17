@@ -51,7 +51,7 @@ public class BacksideUpdaterActivity extends Activity {
     private static Context theView;
 	private static TextView textView;
 	private static TextView buttonTextView;
-	private static String manifestURL = ""; // "http://192.168.1.148/legacy"; // for local testing
+	private static String manifestURL = "";
 	private static final String BUILD_VERSION = Build.VERSION.INCREMENTAL;
 	private static final String[] SEPARATED_DATE = BUILD_VERSION.split("\\.");
 	private static final int BUILD_DATE = Integer.parseInt(SEPARATED_DATE[2]);
@@ -67,6 +67,7 @@ public class BacksideUpdaterActivity extends Activity {
 	private static Long fileSize;
 	private static String theMD5;
 	private static String downloadMD5;
+	private static String md5FileName;
 	private static Boolean goodMD5;
 	private Boolean upToDate;
 	private Boolean alreadyDownloaded;
@@ -85,6 +86,7 @@ public class BacksideUpdaterActivity extends Activity {
 		setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 		setContentView(R.layout.main);
 		theView = this;
+		// https://raw.github.com/JerryScript/BACKside-IHO/master/legacy //for local testing  "http://192.168.1.148/legacy"; 
 		manifestURL = theView.getString(R.string.manifest_url);
 		textView = (TextView) findViewById(R.id.pagetext);
 		textView.setMovementMethod(LinkMovementMethod.getInstance());
@@ -102,12 +104,6 @@ public class BacksideUpdaterActivity extends Activity {
 		gd = new GestureDetector(getBaseContext(), sogl);
 	}
 
-	// Completely exit app when back button is pressed
-	@Override
-	public void onBackPressed() {
-	    System.exit(0);
-	}
-	
 	// Keep portrait orientation only, I'm lazy
 	@Override
 	public void onConfigurationChanged(Configuration newConfig) {
@@ -149,7 +145,7 @@ public class BacksideUpdaterActivity extends Activity {
 	// Create menu_key menus
 	@Override
     public boolean onCreateOptionsMenu(Menu menu) {
-		menu.add(1, 1, 1, "Choose ROM Zip From SDCard");
+		menu.add(1, 1, 1, "Choose Zip From SDCard");
 		menu.add(1, 2, 2, "Show Changelog");
 		menu.add(1, 3, 3, "Show All Versions");
 		menu.add(1, 4, 4, "Install A Recovery");
@@ -173,7 +169,9 @@ public class BacksideUpdaterActivity extends Activity {
 			showExtendedManifest();
 			return true;
 		case 4:
+			buttonTextView.setVisibility(4);
 			textView.setText("Press Menu Key For Options");
+			textView.setGravity(Gravity.CENTER);
 			TextView myMsg = new TextView(theView);
 			myMsg.setText("Click Choose Recovery\nto install a recovery image\nstored on your sdcard");
 			myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -242,16 +240,23 @@ public class BacksideUpdaterActivity extends Activity {
 							// Nothing we can do till we pull downloads into the app
 							ALREADY_CHECKED = 2;
 							// check if download has started
-							final String file = android.os.Environment.getExternalStorageDirectory().getPath() + localFileName;
+							String tempFile = "/sdcard" + localFileName;
+							final String badFileName = localFileName.substring(0,localFileName.length()-3) + "txt";
+							final String badFile = (badFileName.indexOf("/dcard") >= 0) ? badFileName : "/sdcard" + badFileName;
+							final File fBad = new File(badFile);
+							if (fBad.exists()) {
+								tempFile = badFile;
+								}
+							final String file = tempFile;
 							final File f = new File(file);
 							if (f.exists()) {
 								// Download is still in progress, so show it
 								final ProgressDialog downloadDialog = new ProgressDialog(theView);
-								downloadDialog.setCancelable(true);
+								downloadDialog.setCancelable(false);
 								downloadDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
 								downloadDialog.setProgress(0);
 								downloadDialog.setMax(100);
-								downloadDialog.setMessage("Downloading\n" + romName + "\n\nNote- It is safe to continue downloading in the background");
+								downloadDialog.setMessage("Downloading\n" + romName + "\n\nPress your Home key to continue downloading in the background");
 								downloadDialog.setOnDismissListener(new OnDismissListener() {
 									public void onDismiss(DialogInterface dialog) {
 										final File fProgress = new File(file);
@@ -260,7 +265,7 @@ public class BacksideUpdaterActivity extends Activity {
 										if(percentageDownloaded >= 100) {
 											try {
 												textView.setText("Checking MD5");
-												checkMD5(localFileName, false);
+												checkMD5(file, false);
 												} catch (IOException e) {
 													e.printStackTrace();
 													}
@@ -343,17 +348,27 @@ public class BacksideUpdaterActivity extends Activity {
 			// create a separate thread to check the manifest
 			new Thread(new Runnable() {
 				public void run() {
+					BufferedReader rd = null;
 					try {
+						String lines = "";
+						line = "";
 						HttpClient client = new DefaultHttpClient();
 						HttpGet request = new HttpGet(manifestURL);
 						HttpResponse response = client.execute(request);
 						// Get the response
-						BufferedReader rd = new BufferedReader(new InputStreamReader(
+						rd = new BufferedReader(new InputStreamReader(
 								response.getEntity().getContent()));
-						line = rd.readLine();
+						while ((lines = rd.readLine()) != null) {
+							line = line + lines;
+						}
 					} catch (IOException e) {
 						textView.setText(e.getMessage());
 					}
+		        	finally {
+		        		try { rd.close(); }
+		        		catch(Exception e) {}
+		        		rd = null;
+		        	}
 					manifestDialog.dismiss();
 					return;
 				}
@@ -430,15 +445,27 @@ public class BacksideUpdaterActivity extends Activity {
 		upToDate = (BUILD_DATE >= Integer.parseInt(theDate) && choosenDate == 0);
 		if (upToDate) { buttonTextView.setVisibility(4); } else { buttonTextView.setVisibility(0); }
 		// check for the latest version in the downloaded directory
-		String file = android.os.Environment.getExternalStorageDirectory().getPath() + localFileName;
-		File f = new File(file);
+		String file = (localFileName.indexOf("/sdcard") >= 0) ? localFileName : "/sdcard" + localFileName;
+		String badFile = file.substring(0, file.length() -3) + "txt";
+		File fBad = new File(badFile);
+		if (fBad.exists()) {
+			try {
+				Runtime.getRuntime().exec("mv " + badFile + " " + file);
+				Thread.sleep(10);
+			} catch (IOException e) {
+				showCustomToast("Could not move file\n\n" + e.toString());
+			} catch (InterruptedException ee) {
+				showCustomToast("Could not move file\n\n" + ee.toString());
+			}
+		}
+		final File f = new File(file);
 		if (!upToDate) {
 			// if we aren't up to date, see if we have downloaded yet
 			if (f.exists()) {
 				if (!checkFileSize(romName)){
 					// if the download is complete, prompt user to check the md5sum
-					showCustomToast("The latest build is already downloaded\n\nClick the button to check the MD5 sum");
-					textView.setText("Latest build is already downloaded.\n\nReady to check md5\nof downloaded file.\n\nOr Press Menu Key For Options");
+					showCustomToast("The package is already downloaded\n\nClick the button to check the MD5 sum");
+					textView.setText("The package is already downloaded.\n\nReady to check md5\nof downloaded file.\n\nOr Press Menu Key For Options");
 					buttonTextView.setText("Check MD5 Now");
 					ALREADY_CHECKED = 2; // reset value so next button click returns to these functions
 				} else {
@@ -453,7 +480,7 @@ public class BacksideUpdaterActivity extends Activity {
 				textView.setGravity(3);
 				textView.setText("Changelog "+romName+":\n\n"+theChangeLog);
 				if (choosenDate == 0){
-					showCustomToast("A new build is available:\n\n" + romName);
+					showCustomToast("A new package is available:\n\n" + romName);
 				} else if ((choosenDate == (romVersions.length -1)) && (romName.indexOf("CWM") >= 0)) {
 					showCustomToast("Click the button to download\n\nCWM-Green-Recovery-"+theDate);
 				} else {
@@ -531,7 +558,7 @@ public class BacksideUpdaterActivity extends Activity {
 			// and give options to delete and re-download the file
 			buttonTextView.setVisibility(0);
 			TextView myMsg = new TextView(theView);
-			myMsg.setText("The downloaded file md5\n"+downloadMD5+"\ndoes not match the build\n"+theMD5+"\n\nDELETE CORRUPT FILE\n\nThen download again!");
+			myMsg.setText("The downloaded file md5\n"+downloadMD5+"\ndoes not match the package\n"+theMD5+"\n\nDELETE CORRUPT FILE\n\nThen download again!");
 			myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
 			new AlertDialog.Builder(theView)
 			.setTitle("Download Error")
@@ -558,9 +585,16 @@ public class BacksideUpdaterActivity extends Activity {
 	
 	// Check the md5sum in a separate thread to avoid hanging the main thread
 	public static String checkMD5(final String fileName, Boolean downloaded) throws IOException {
-		final String thisFileName = fileName;
+		String tempFileName = "";
+		if (fileName.indexOf("txt") >= 0) {
+			tempFileName = fileName.substring(0, fileName.length() - 3) + "img";
+			Runtime.getRuntime().exec("mv " + fileName + " " + tempFileName);
+		} else { 
+			tempFileName = fileName;
+		}
+		final String thisFileName = tempFileName;
 		if (thisFileName.substring(thisFileName.length() - 3).equalsIgnoreCase("zip") || thisFileName.substring(thisFileName.length() - 3).equalsIgnoreCase("img")) {
-			final String md5FileName = (!downloaded) ? android.os.Environment.getExternalStorageDirectory().getPath() + fileName : fileName;
+			md5FileName = (thisFileName.indexOf("/sdcard") >= 0) ? thisFileName : "/sdcard" + thisFileName;
 			buttonTextView.setVisibility(4);
 			textView.setText("Checking MD5");
 			final ProgressDialog md5Dialog = ProgressDialog.show(
@@ -568,7 +602,7 @@ public class BacksideUpdaterActivity extends Activity {
 			md5Dialog.setOnDismissListener(new OnDismissListener() {
 				public void onDismiss(DialogInterface dialog) {
 					if (thisFileName.substring(thisFileName.length() - 3).equalsIgnoreCase("zip")) {
-						md5Dialog(fileName, true); // show md5 dialogs
+						md5Dialog(thisFileName, true); // show md5 dialogs
 					} else if (thisFileName.substring(thisFileName.length() - 3).equalsIgnoreCase("img")) {
 						installRecovery(thisFileName);
 					}
@@ -587,6 +621,8 @@ public class BacksideUpdaterActivity extends Activity {
 					} catch (IOException e) {
 						showCustomToast(e.getMessage());
 						textView.setText(e.getMessage());
+					} catch (NullPointerException e2) {
+						showCustomToast(e2.getMessage());
 					}
 					md5Dialog.dismiss();
 					return;
@@ -605,6 +641,9 @@ public class BacksideUpdaterActivity extends Activity {
 			java.lang.Process process = Runtime.getRuntime().exec("md5sum "+fileName);
 			BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 			String[] results =  bufferedReader.readLine().split(" ");
+    		try { bufferedReader.close(); }
+    		catch(Exception e) {}
+    		bufferedReader = null;
 			downloadMD5 = results[0];
 		}
 		return downloadMD5;
@@ -643,7 +682,7 @@ public class BacksideUpdaterActivity extends Activity {
 		final String theUpdateFileName = updateFileName;
 		final String recoveryUpdateString ="chmod 0777 /cache && chmod 0777 /cache/recovery && touch /cache/recovery/command && echo '--wipe_cache\n--update_package=" + theUpdateFileName + "' > /cache/recovery/command";
 		TextView myMsg = new TextView(theView);
-		myMsg.setText("Are you sure you want to\nreboot into recovery now?\n\nClick Reboot Recovery\nto install the ROM manually\n\nClick Install ROM Now!\nto automatically wipe cache/dalvik-cache\nand install the update package!\n\nNote- Auto-Install tested on:\nCWM-Green, BobZhome, IHO,\nand DrewWalton-Touch recoveries\n\n*Auto wipe_dalvik-cache only works with\nCWM-Green recovery*");
+		myMsg.setText("Are you sure you want to\nreboot into recovery now?\n\nClick Reboot Recovery\nto install the package manually\n\nClick Install ROM Now!\nto automatically wipe cache/dalvik-cache\nand install the update package!\n\nNote- Auto-Install tested on:\nCWM-Green, BobZhome, IHO,\nand DrewWalton-Touch recoveries\n\n*Auto wipe_dalvik-cache only works with\nCWM-Green recovery*");
 		myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
 		new AlertDialog.Builder(theView)
 	    .setTitle("Reboot Recovery - Install ROM")
@@ -657,20 +696,37 @@ public class BacksideUpdaterActivity extends Activity {
 	    })
 	    .setNeutralButton("Install ROM Now!", new DialogInterface.OnClickListener() {
 	        public void onClick(DialogInterface dialog, int whichButton) {
-				textView.setText("Preparing System To Reboot into Recovery\n\nAutomatically Installing ROM...");
+				textView.setText("Preparing System To Reboot into Recovery\n\nAutomatically Installing Package...");
+				String results = "";
+				BufferedReader bufferedReader = null;
 				try {
 					String[] str1 ={"su", "-c", recoveryUpdateString};
-					Runtime.getRuntime().exec(str1);
+					java.lang.Process process = Runtime.getRuntime().exec(str1);
+					bufferedReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+					results =  bufferedReader.readLine();
 					} catch (Exception e) {
-						showCustomToast(e.toString());
+						showCustomToast(e.toString() + " " + results);
 						} finally {
-							Handler handler = new Handler();
-							handler.postDelayed(new Runnable() {
-								public void run() {
-									PowerManager pm = (PowerManager) theView.getSystemService(Context.POWER_SERVICE);
-									pm.reboot("recovery");
-								}
-							}, 1000);
+							if (results == null) {
+								Handler handler = new Handler();
+								handler.postDelayed(new Runnable() {
+									public void run() {
+										File testFile = new File("/cache/recovery/command");
+										if (testFile.exists()){
+											PowerManager pm = (PowerManager) theView.getSystemService(Context.POWER_SERVICE);
+											pm.reboot("recovery");
+										} else {
+											textView.setText("Auto-Install Failed!\n\nCould not write recovery command\n\nPress Menu Key For Options");
+											showCustomToast("Auto-Install Failed!\n\nCould not write recovery command\n\nPress the menu key to try again");
+										}
+									}
+								}, 5000);
+							} else {
+								showCustomToast(results);
+							}
+			        		try { bufferedReader.close(); }
+			        		catch(Exception e) {}
+			        		bufferedReader = null;
 						}
 	        }
 	    })
@@ -700,9 +756,9 @@ public class BacksideUpdaterActivity extends Activity {
 	// bad file handler
 	private static String badFilePath(int whichFileType){
 		if (whichFileType == 0){
-			textView.setText("Error selecting file!\n\nIf you have already downloaded,\npress your menu key to select\nit in file the manager.");
+			textView.setText("Error selecting file!\n\nIf you have already downloaded,\npress your menu key to select\nit in the file manager.");
 		} else {
-			textView.setText("Error selecting file!\n\nRecovery file extension should be img\n\nIf you have already downloaded,\npress your menu key to select\nit in file the manager\nand if it ends with .txt\nrename it from .txt to .img");
+			textView.setText("Error selecting file!\n\nRecovery file extension should be img\n\nIf you have already downloaded,\npress your menu key to select\nit in the filemanager\nand if it ends with .txt\nrename it from .txt to .img");
 		}
 		return "bad";
 	}
@@ -789,7 +845,8 @@ public class BacksideUpdaterActivity extends Activity {
 			})
 			.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int whichButton) {
-					// nothing to do for now
+					textView.setGravity(Gravity.CENTER);
+					textView.setText("Press Menu Key For Options");
 					}
 			}).show();
 		} else {
@@ -814,7 +871,8 @@ public class BacksideUpdaterActivity extends Activity {
 	        	textView.setGravity(80);
 	            textView.setText(recoveryMessage);
 	        }
-	    };		// create a separate thread to install the recovery and grab system output
+	    };		
+	    // create a separate thread to install the recovery and grab system output
 		new Thread(new Runnable() {
 			public void run() {
 	            String[] str ={"su","-c","flash_image recovery " + recoveryName};
@@ -869,6 +927,7 @@ public class BacksideUpdaterActivity extends Activity {
 								if (requestCode == 999) {
 									checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.checkMD5(filePath, true));
 								} else {
+									buttonTextView.setVisibility(4);
 									checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.installRecovery(filePath));									
 								}
 							} catch (IOException e) {
