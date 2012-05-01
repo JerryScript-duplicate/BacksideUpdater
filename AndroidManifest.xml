@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.Backside.BacksideUpdater"
     android:versionCode="3"
-    android:versionName="3.1" >
+    android:versionName="3.3" >
 
     <uses-sdk android:minSdkVersion="10" />
     

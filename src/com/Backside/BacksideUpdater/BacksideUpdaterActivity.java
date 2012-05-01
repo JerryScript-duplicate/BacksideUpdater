@@ -145,11 +145,12 @@ public class BacksideUpdaterActivity extends Activity {
 	// Create menu_key menus
 	@Override
     public boolean onCreateOptionsMenu(Menu menu) {
-		menu.add(1, 1, 1, "Choose Zip From SDCard");
+		menu.add(1, 1, 1, "Choose "+romName+" Zip From SDCard");
 		menu.add(1, 2, 2, "Show Changelog");
 		menu.add(1, 3, 3, "Show All Versions");
 		menu.add(1, 4, 4, "Install A Recovery");
-		menu.add(1, 5, 5, "Exit");
+		menu.add(1, 5, 5, "Backup/Restore");
+		menu.add(1, 6, 6, "Exit");
 		return true;
 	}
 
@@ -193,6 +194,9 @@ public class BacksideUpdaterActivity extends Activity {
 			}).show();
 			return true;
 		case 5:
+			backupRestoreDialog();
+			return true;
+		case 6:
 			System.exit(0);
 			return true;
 	}
@@ -545,7 +549,7 @@ public class BacksideUpdaterActivity extends Activity {
 			.setPositiveButton("Reboot Recovery", new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int whichButton) {
 					textView.setText("Rebooting into Recovery...");
-					RebootCmd(fileName);
+					RebootList(fileName);
 				}
 			})
 			.setNegativeButton("Install Later", new DialogInterface.OnClickListener() {
@@ -671,70 +675,93 @@ public class BacksideUpdaterActivity extends Activity {
 	    }).show();
 	}
 	
+	// show a list of older builds
+	public static void RebootList(String theFileName){
+		final String rebootFileName = theFileName;
+		final String[] rebootOptions = { "MANUAL INSTALL\n--reboot into recovery\n", "AUTOMATIC INSTALL\n--wipes cache + dalvik\n", "AUTO INSTALL FULL WIPE\n--formats boot, data,\n--system, cache & dalvik\n"};
+		new AlertDialog.Builder(theView)
+		.setTitle("Choose Installation Method")
+	    .setNegativeButton("CANCEL - INSTALL LATER", new DialogInterface.OnClickListener() {
+	        public void onClick(DialogInterface dialog, int whichButton) {
+				textView.setText("Press Menu Key For Options");
+	        }
+	    })
+		.setItems(rebootOptions, new DialogInterface.OnClickListener() {
+		    public void onClick(DialogInterface dialog, int item) {
+		    	RebootCmd(rebootFileName, item);
+		    }
+		}).show();
+	}
+
 	// create a dialog choice to allow user to reboot directly into recovery and/or install ROM automatically
-	public static void RebootCmd(String theFileName) {
+	public static void RebootCmd(String theFileName, int rebootMethod) {
 		String updateFileName = "";
 		if (theFileName.indexOf("sdcard") < 0) {
 			updateFileName = "/sdcard" + theFileName;
 		} else {
 			updateFileName = theFileName;
 		}
-		final String theUpdateFileName = updateFileName;
-		final String recoveryUpdateString ="chmod 0777 /cache && chmod 0777 /cache/recovery && touch /cache/recovery/command && echo '--wipe_cache\n--update_package=" + theUpdateFileName + "' > /cache/recovery/command";
-		TextView myMsg = new TextView(theView);
-		myMsg.setText("Are you sure you want to\nreboot into recovery now?\n\nClick Reboot Recovery\nto install the package manually\n\nClick Install ROM Now!\nto automatically wipe cache/dalvik-cache\nand install the update package!\n\nNote- Auto-Install tested on:\nCWM-Green, BobZhome, IHO,\nand DrewWalton-Touch recoveries\n\n*Auto wipe_dalvik-cache only works with\nCWM-Green recovery*");
-		myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
-		new AlertDialog.Builder(theView)
-	    .setTitle("Reboot Recovery - Install ROM")
-	    .setView(myMsg)
-	    .setPositiveButton("Reboot Recovery", new DialogInterface.OnClickListener() {
-	        public void onClick(DialogInterface dialog, int whichButton) {
-				textView.setText("Rebooting into Recovery...");
-				PowerManager pm = (PowerManager) theView.getSystemService(Context.POWER_SERVICE);
-		        pm.reboot("recovery");
-	        }
-	    })
-	    .setNeutralButton("Install ROM Now!", new DialogInterface.OnClickListener() {
-	        public void onClick(DialogInterface dialog, int whichButton) {
-				textView.setText("Preparing System To Reboot into Recovery\n\nAutomatically Installing Package...");
-				String results = "";
-				BufferedReader bufferedReader = null;
-				try {
-					String[] str1 ={"su", "-c", recoveryUpdateString};
-					java.lang.Process process = Runtime.getRuntime().exec(str1);
-					bufferedReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-					results =  bufferedReader.readLine();
-					} catch (Exception e) {
-						showCustomToast(e.toString() + " " + results);
-						} finally {
-							if (results == null) {
-								Handler handler = new Handler();
-								handler.postDelayed(new Runnable() {
-									public void run() {
-										File testFile = new File("/cache/recovery/command");
-										if (testFile.exists()){
-											PowerManager pm = (PowerManager) theView.getSystemService(Context.POWER_SERVICE);
-											pm.reboot("recovery");
-										} else {
-											textView.setText("Auto-Install Failed!\n\nCould not write recovery command\n\nPress Menu Key For Options");
-											showCustomToast("Auto-Install Failed!\n\nCould not write recovery command\n\nPress the menu key to try again");
-										}
+		if (theFileName.indexOf("mnt") >= 0) {
+			String[] fixFileName = theFileName.split("/mnt");
+			updateFileName = fixFileName[fixFileName.length - 1];
+		} else {
+			updateFileName = theFileName;
+		}
+		String theUpdateFileName = updateFileName;
+		String recoveryUpdateString = "";
+		if (rebootMethod == 1) {
+			recoveryUpdateString ="chmod 0777 /cache && chmod 0777 /cache/recovery && touch /cache/recovery/command && echo '--update_package=" + theUpdateFileName + "' > /cache/recovery/command";
+			textView.setText("Preparing System To Reboot Into Recovery\n\nWiping Cache & Dalvik-Cache\n\nAutomatically Installing Package...");
+		}
+		if (rebootMethod == 2) {
+			recoveryUpdateString ="chmod 0777 /cache && chmod 0777 /cache/recovery && touch /cache/recovery/command && echo '--update_wiped=" + theUpdateFileName + "' > /cache/recovery/command";
+			textView.setText("Preparing System To Reboot Into Recovery\n\nWiping Cache & Dalvik-Cache\n\nFormating Boot, System, and Data\n\nAutomatically Installing The Choosen Zip...");
+		}
+		if (rebootMethod == 3) {
+			recoveryUpdateString ="chmod 0777 /cache && chmod 0777 /cache/recovery && touch /cache/recovery/command && echo '--backup' > /cache/recovery/command";
+			textView.setText("Preparing System To Reboot Into Recovery\n\nFor Automatic Backup...");
+		}
+		if (rebootMethod == 4) {
+			recoveryUpdateString ="chmod 0777 /cache && chmod 0777 /cache/recovery && touch /cache/recovery/command && echo '--restore_package=" + theUpdateFileName + "' > /cache/recovery/command";
+			textView.setText("Preparing System To Reboot Into Recovery\n\nTo Restore The System To\n\n" + theUpdateFileName + "...");
+		}
+		BufferedReader bufferedReader = null;
+		String results = "";
+		if (rebootMethod == 0) {
+			textView.setText("Rebooting into Recovery\n\nManually Wipe Cache & Dalvik-Cache\nThen Select Zip From SDCard To Install...");
+			PowerManager pm = (PowerManager) theView.getSystemService(Context.POWER_SERVICE);
+			pm.reboot("recovery");
+		} else {
+			try {
+				String[] str1 ={"su", "-c", recoveryUpdateString};
+				java.lang.Process process = Runtime.getRuntime().exec(str1);
+				bufferedReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+				results =  bufferedReader.readLine();
+				} catch (Exception e) {
+					showCustomToast(e.toString() + " " + results);
+					} finally {
+						if (results == null) {
+							Handler handler = new Handler();
+							handler.postDelayed(new Runnable() {
+								public void run() {
+									File testFile = new File("/cache/recovery/command");
+									if (testFile.exists()){
+										PowerManager pm = (PowerManager) theView.getSystemService(Context.POWER_SERVICE);
+										pm.reboot("recovery");
+									} else {
+										textView.setText("Auto-Install Failed!\n\nCould not write recovery command\n\nPress Menu Key For Options");
+										showCustomToast("Auto-Install Failed!\n\nCould not write recovery command\n\nPress the menu key to try again");
 									}
-								}, 5000);
-							} else {
-								showCustomToast(results);
-							}
-			        		try { bufferedReader.close(); }
-			        		catch(Exception e) {}
-			        		bufferedReader = null;
+								}
+							}, 5000);
+						} else {
+							showCustomToast(results);
 						}
-	        }
-	    })
-	    .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-	        public void onClick(DialogInterface dialog, int whichButton) {
-				textView.setText("Press Menu Key For Options");
-	        }
-	    }).show();
+		        		try { bufferedReader.close(); }
+		        		catch(Exception e) {}
+		        		bufferedReader = null;
+					}
+		}
 	}
 	
 	// Used to determine if download is complete
@@ -909,7 +936,79 @@ public class BacksideUpdaterActivity extends Activity {
 		return "done";
 	}
 
-	// Handle file picker's results
+	// create a dialog showing automatic backup and restore options
+	public void backupRestoreDialog () {
+		showCustomToast("Warning!\n\nAutomatic Functions Only Work\nWith CWM-Green Recovery!");
+		TextView myMsg = new TextView(theView);
+		myMsg.setText("NOTE - CWM-Green V3.3 Required!!!\n\nPress Backup Now to automatically backup your current configuration in recovery\n\nPress Restore to select a compatible backup folder and automatically restore it");
+		myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
+		new AlertDialog.Builder(theView)
+		.setTitle("Auto Backup/Restore Options")
+		.setView(myMsg)
+		.setPositiveButton("Backup Now", new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int whichButton) {
+				RebootCmd("", 3);
+			}
+		})
+		.setNeutralButton("Restore", new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int whichButton) {
+				showRestoreList();
+			}
+		})
+		.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int whichButton) {
+				textView.setGravity(Gravity.CENTER);
+				textView.setText("Press Menu Key For Options");
+				}
+		}).show();
+		
+	}
+
+	// create a list of available backups for use in automatic resotre
+	public static String showRestoreList() {
+		File f = new File("/sdcard/clockworkmod/backup");
+		final String[] files = f.list();
+		if (files == null) {
+			showCustomToast("No Backups Found in\n/sdcard/clockworkmod/backup");
+		} else {
+			new AlertDialog.Builder(theView)
+			.setTitle("Choose Restore Package")
+		    .setNegativeButton("CANCEL - RESTORE LATER", new DialogInterface.OnClickListener() {
+		        public void onClick(DialogInterface dialog, int whichButton) {
+					textView.setText("Press Menu Key For Options");
+		        }
+		    })
+			.setItems(files, new DialogInterface.OnClickListener() {
+			    public void onClick(DialogInterface dialog, int item) {
+			    	RebootCmd(("/sdcard/clockworkmod/backup/" + files[item]), 4);
+			    }
+			}).show();
+		}
+		return "";
+	}
+	// create a dialog to warn user before performing automatic restore
+	public static String restoreBackup (String theFileName, int recoverytype) {
+		TextView myMsg = new TextView(theView);
+		myMsg.setText("Are You Sure You Want To Restore " + theFileName + "\n\nNOTE - CWM-Green V3.3 Required!!!");
+		myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
+		new AlertDialog.Builder(theView)
+		.setTitle("Automatically Restore Now")
+		.setView(myMsg)
+		.setPositiveButton("Restore Now", new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int whichButton) {
+				RebootCmd("", 3);
+			}
+		})
+		.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int whichButton) {
+				textView.setGravity(Gravity.CENTER);
+				textView.setText("Press Menu Key For Options");
+				}
+		}).show();
+		return "";
+	}
+
+// Handle file picker's results
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 		super.onActivityResult(requestCode, resultCode, data);
@@ -926,9 +1025,12 @@ public class BacksideUpdaterActivity extends Activity {
 							try {
 								if (requestCode == 999) {
 									checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.checkMD5(filePath, true));
-								} else {
+								} else if (requestCode == 1000){
 									buttonTextView.setVisibility(4);
 									checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.installRecovery(filePath));									
+								} else if (requestCode == 1001){
+									buttonTextView.setVisibility(4);
+									checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.restoreBackup(filePath, 4));									
 								}
 							} catch (IOException e) {
 								checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.badFilePath(0));
