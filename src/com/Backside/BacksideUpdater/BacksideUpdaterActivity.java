@@ -179,7 +179,7 @@ public class BacksideUpdaterActivity extends Activity {
 			new AlertDialog.Builder(theView)
 			.setTitle("Install Recovery Image")
 			.setView(myMsg)
-			.setPositiveButton("Choose Recovery From SDcard", new DialogInterface.OnClickListener() {
+			.setPositiveButton("Choose Recovery", new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int whichButton) {
 					recoveryName = "recovery.img";
 			        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
@@ -677,8 +677,9 @@ public class BacksideUpdaterActivity extends Activity {
 	
 	// show a list of older builds
 	public static void RebootList(String theFileName){
+		showCustomToast("Note - Automatic Options\nOnly Work With CWM-Green Recovery!");
 		final String rebootFileName = theFileName;
-		final String[] rebootOptions = { "MANUAL INSTALL\n--reboot into recovery\n", "AUTOMATIC INSTALL\n--wipes cache + dalvik\n", "AUTO INSTALL FULL WIPE\n--formats boot, data,\n--system, cache & dalvik\n"};
+		final String[] rebootOptions = { "MANUAL INSTALL\n--reboot into recovery\n", "AUTOMATIC INSTALL\n--wipes cache + dalvik\n--then installs ROM\n", "AUTO INSTALL FULL WIPE\nWarning- Wipes Info,\nPrefs, Apps, Everything!\n--formats boot, data,\n--system, cache & dalvik"};
 		new AlertDialog.Builder(theView)
 		.setTitle("Choose Installation Method")
 	    .setNegativeButton("CANCEL - INSTALL LATER", new DialogInterface.OnClickListener() {
@@ -940,12 +941,12 @@ public class BacksideUpdaterActivity extends Activity {
 	public void backupRestoreDialog () {
 		showCustomToast("Warning!\n\nAutomatic Functions Only Work\nWith CWM-Green Recovery!");
 		TextView myMsg = new TextView(theView);
-		myMsg.setText("NOTE - CWM-Green V3.3 Required!!!\n\nPress Backup Now to automatically backup your current configuration in recovery\n\nPress Restore to select a compatible backup folder and automatically restore it");
+		myMsg.setText("\nNOTE - CWM-Green V3.3 Required!!!\n\nPress Backup to automatically backup your entire phone in recovery\n\nPress Restore to select a compatible backup folder and automatically restore it\n");
 		myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
 		new AlertDialog.Builder(theView)
 		.setTitle("Auto Backup/Restore Options")
 		.setView(myMsg)
-		.setPositiveButton("Backup Now", new DialogInterface.OnClickListener() {
+		.setPositiveButton("Backup", new DialogInterface.OnClickListener() {
 			public void onClick(DialogInterface dialog, int whichButton) {
 				RebootCmd("", 3);
 			}
@@ -980,14 +981,17 @@ public class BacksideUpdaterActivity extends Activity {
 		    })
 			.setItems(files, new DialogInterface.OnClickListener() {
 			    public void onClick(DialogInterface dialog, int item) {
-			    	RebootCmd(("/sdcard/clockworkmod/backup/" + files[item]), 4);
+			    	restoreBackup(("/sdcard/clockworkmod/backup/" + files[item]), 4);
 			    }
 			}).show();
 		}
 		return "";
 	}
+	
 	// create a dialog to warn user before performing automatic restore
 	public static String restoreBackup (String theFileName, int recoverytype) {
+		final String restoreFile = theFileName;
+		final int recoveryFlag = recoverytype;
 		TextView myMsg = new TextView(theView);
 		myMsg.setText("Are You Sure You Want To Restore " + theFileName + "\n\nNOTE - CWM-Green V3.3 Required!!!");
 		myMsg.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -996,7 +1000,7 @@ public class BacksideUpdaterActivity extends Activity {
 		.setView(myMsg)
 		.setPositiveButton("Restore Now", new DialogInterface.OnClickListener() {
 			public void onClick(DialogInterface dialog, int whichButton) {
-				RebootCmd("", 3);
+				RebootCmd(restoreFile, recoveryFlag);
 			}
 		})
 		.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
@@ -1028,9 +1032,6 @@ public class BacksideUpdaterActivity extends Activity {
 								} else if (requestCode == 1000){
 									buttonTextView.setVisibility(4);
 									checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.installRecovery(filePath));									
-								} else if (requestCode == 1001){
-									buttonTextView.setVisibility(4);
-									checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.restoreBackup(filePath, 4));									
 								}
 							} catch (IOException e) {
 								checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.badFilePath(0));
