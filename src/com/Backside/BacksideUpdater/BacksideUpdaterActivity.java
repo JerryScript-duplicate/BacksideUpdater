@@ -77,6 +77,7 @@ public class BacksideUpdaterActivity extends Activity {
 	private static int recoveryStepCount = 0;
     private static final int REQUEST_CODE_PICK_FILE = 999;
     private static final int REQUEST_CODE_PICK_RECOVERY = 1000;
+    private static final int REQUEST_CODE_PICK_OTHER = 1001;
     GestureDetector gd;
 	
 /** Called when the activity is first created. */
@@ -145,16 +146,17 @@ public class BacksideUpdaterActivity extends Activity {
 	// Create menu_key menus
 	@Override
     public boolean onCreateOptionsMenu(Menu menu) {
-		menu.add(1, 1, 1, "Choose "+romName+" Zip From SDCard");
+		menu.add(1, 1, 1, "Choose From SDCard");
 		menu.add(1, 2, 2, "Show Changelog");
-		menu.add(1, 3, 3, "Show All Versions");
-		menu.add(1, 4, 4, "Install A Recovery");
-		menu.add(1, 5, 5, "Backup/Restore");
-		menu.add(1, 6, 6, "Exit");
+		menu.add(1, 3, 3, "Backup/Restore");
+		menu.add(1, 4, 4, "Show All Versions");
+		menu.add(1, 5, 5, "Install A Recovery");
+		menu.add(1, 6, 6, "Install Other ROM or Theme");
+		menu.add(1, 7, 7, "Exit");
 		return true;
 	}
 
-        @Override
+	@Override
 	public boolean onOptionsItemSelected(MenuItem item) {
 		switch(item.getItemId()) {
 		case 1:
@@ -167,9 +169,13 @@ public class BacksideUpdaterActivity extends Activity {
 			return true;
 		case 3:
 			textView.setText("Press Menu Key For Options");
-			showExtendedManifest();
+			backupRestoreDialog();
 			return true;
 		case 4:
+			textView.setText("Press Menu Key For Options");
+			showExtendedManifest();
+			return true;
+		case 5:
 			buttonTextView.setVisibility(4);
 			textView.setText("Press Menu Key For Options");
 			textView.setGravity(Gravity.CENTER);
@@ -193,10 +199,12 @@ public class BacksideUpdaterActivity extends Activity {
 				}
 			}).show();
 			return true;
-		case 5:
-			backupRestoreDialog();
-			return true;
 		case 6:
+	        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+	        intent.setDataAndType(Uri.fromFile(new File("/sdcard/download")), "file/*");
+	        startActivityForResult(intent, REQUEST_CODE_PICK_OTHER);	
+			return true;
+		case 7:
 			System.exit(0);
 			return true;
 	}
@@ -1012,12 +1020,18 @@ public class BacksideUpdaterActivity extends Activity {
 		return "";
 	}
 
-// Handle file picker's results
+	// Allow user to pick any ROM zip file to install, but warn first
+	public static String installOtherROM(String theFileName){
+		RebootList(theFileName);
+		return "";
+	}
+
+	// Handle file picker's results
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 		super.onActivityResult(requestCode, resultCode, data);
 		if (resultCode == RESULT_OK) {
-			if (requestCode == 999 || requestCode == 1000) {
+			if (requestCode == 999 || requestCode == 1000 || requestCode == 1001) {
 				if (data != null) {
 					// obtain the filename
 					try {
@@ -1032,6 +1046,9 @@ public class BacksideUpdaterActivity extends Activity {
 								} else if (requestCode == 1000){
 									buttonTextView.setVisibility(4);
 									checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.installRecovery(filePath));									
+								} else if (requestCode == 1001){
+									buttonTextView.setVisibility(4);
+									checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.installOtherROM(filePath));									
 								}
 							} catch (IOException e) {
 								checkDownloadedMD5.setAction(com.Backside.BacksideUpdater.BacksideUpdaterActivity.badFilePath(0));
